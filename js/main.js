@@ -21,7 +21,7 @@
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
-import { Pool, Timers, clamp, rand } from './util.js';
+import { TAU, Pool, Timers, clamp, rand } from './util.js';
 import { Background } from './background.js';
 import { Hole } from './hole.js';
 import { Thing } from './thing.js';
@@ -116,7 +116,9 @@ const celebrations = new Celebrations({ particles, fx, hud, timers, world, toScr
 const surprises = new Surprises(fx);
 const hole = new Hole();
 
-const things = new Pool(130, () => new Thing());
+// Must comfortably exceed the city plan's thing count — a full pool silently
+// recycles the oldest live thing, which in a fixed city means losing pieces.
+const things = new Pool(220, () => new Thing());
 
 let running = false;
 let started = false;
@@ -455,12 +457,7 @@ function update(dt) {
 }
 
 function render() {
-  // --- screen space: the sky ------------------------------------------------
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
-  background.draw(ctx, world);
-  surprises.draw(ctx);   // behind the world he plays in
-
-  // --- city space, through the camera ---------------------------------------
+  // --- city space, through the camera. Top-down: the ground IS the scene. ---
   const z = cam.zoom;
   ctx.setTransform(
     scale * z, 0, 0, scale * z,
@@ -469,10 +466,25 @@ function render() {
   );
   const view = visibleRect();
   background.drawGround(ctx, view, field);
-  hole.draw(ctx);
-  // Things draw over the hole, so a swallowed one visibly spirals down INTO it.
+
+  // The pit first; then anything SINKING, clipped inside the mouth so it
+  // visibly drops below ground; then the rim and eyes close over it.
+  hole.drawPit(ctx);
+  const mouth = hole.mouthEllipse;
   for (const th of things.items) {
-    if (!th.active) continue;
+    if (!th.active || !th.sinking) continue;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(mouth.x, mouth.y, mouth.rx, mouth.ry, 0, 0, TAU);
+    ctx.clip();
+    th.draw(ctx);
+    ctx.restore();
+  }
+  hole.drawRim(ctx);
+
+  // Everything still standing (or only just tipping in) draws above ground.
+  for (const th of things.items) {
+    if (!th.active || th.sinking) continue;
     // Skip anything comfortably outside the camera — the city is big.
     if (th.x + th.size * 2 < view.x || th.x - th.size * 2 > view.x + view.w
       || th.y + th.size * 2 < view.y || th.y - th.size * 2 > view.y + view.h) continue;
@@ -480,8 +492,10 @@ function render() {
   }
   particles.draw(ctx);
 
-  // --- screen space again: overlays -----------------------------------------
+  // --- screen space: light, sky visitors, overlays ---------------------------
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  background.drawLightTint(ctx, world);
+  surprises.draw(ctx);   // flying ABOVE the city
   hud.drawFlash(ctx, world);
   fx.draw(ctx);
   drawGuides(ctx);

@@ -9,7 +9,7 @@
    --------------------------------------------------------------------------- */
 
 import { TAU, rand, lerp, clamp, easeInOutSine, hsla } from './util.js';
-import { ROAD_YS, ROAD_WIDTH, AVENUE } from './city.js';
+import { ROAD_YS, ROAD_WIDTH, AVENUE, PANELS } from './city.js';
 
 const CLOUD_COUNT = 7;
 const STAR_COUNT = 70;
@@ -212,64 +212,88 @@ export class Background {
   }
 
   /**
-   * The city ground, drawn in WORLD space under the camera. The sky above is
-   * fixed to the screen; the ground is what actually scrolls, so it is what
-   * makes movement visible — and the roads are what make it read as a CITY.
+   * The city ground, drawn in WORLD space under the camera. This is a proper
+   * top-down map: solid land, paved city blocks with kerbs, an asphalt
+   * parking block with bay lines, a park lawn, roads with centre dashes and
+   * zebra crossings. No sky behind the gameplay — the ground IS the scene.
    * Deterministic — no allocation, no stored state, stable across frames.
    * @param {{x: number, y: number, w: number, h: number}} view visible world rect
    * @param {{w: number, h: number}} field world bounds
    */
   drawGround(ctx, view, field) {
-    const p = this.palette();
+    // --- the land: countryside beyond the city, grass inside it --------------
+    ctx.fillStyle = '#5a9c52';
+    ctx.fillRect(view.x - 8, view.y - 8, view.w + 16, view.h + 16);
+    ctx.fillStyle = '#6fb562';
+    ctx.fillRect(0, 0, field.w, field.h);
 
-    // --- the park lawn at the bottom of the city -----------------------------
-    const parkTop = field.h * 0.8;
-    if (view.y + view.h > parkTop) {
-      ctx.fillStyle = hsla(p.hillFar[0], p.hillFar[1], p.hillFar[2], 0.28);
-      ctx.fillRect(0, parkTop, field.w, field.h - parkTop);
-    }
-
-    // --- soft grassy blotches and pebbles, everywhere off the roads ----------
+    // --- soft grass mottling, so the land is not one flat green --------------
     const CELL = 240;
     const x0 = Math.floor(view.x / CELL) - 1;
     const y0 = Math.floor(view.y / CELL) - 1;
     const x1 = Math.ceil((view.x + view.w) / CELL) + 1;
     const y1 = Math.ceil((view.y + view.h) / CELL) + 1;
-
     for (let cy = y0; cy <= y1; cy++) {
       for (let cx = x0; cx <= x1; cx++) {
         const r1 = groundHash(cx, cy, 1);
         const bx = (cx + groundHash(cx, cy, 2)) * CELL;
         const by = (cy + groundHash(cx, cy, 3)) * CELL;
-        if (bx > 0 && by > 0 && bx < field.w && by < field.h) {
-          ctx.beginPath();
-          ctx.ellipse(bx, by, 40 + r1 * 80, (40 + r1 * 80) * 0.6, r1 * TAU, 0, TAU);
-          ctx.fillStyle = hsla(p.hillFar[0], p.hillFar[1], p.hillFar[2], 0.08 + r1 * 0.06);
-          ctx.fill();
-        }
-        for (let i = 0; i < 2; i++) {
-          const dx = (cx + groundHash(cx, cy, 4 + i)) * CELL;
-          const dy = (cy + groundHash(cx, cy, 7 + i)) * CELL;
-          if (dx < 0 || dy < 0 || dx > field.w || dy > field.h) continue;
-          ctx.beginPath();
-          ctx.arc(dx, dy, 3 + groundHash(cx, cy, 10 + i) * 4, 0, TAU);
-          ctx.fillStyle = hsla(p.cloud[0], p.cloud[1], p.cloud[2], 0.3);
-          ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(bx, by, 50 + r1 * 90, (50 + r1 * 90) * 0.6, r1 * TAU, 0, TAU);
+        ctx.fillStyle = `rgba(64, 128, 58, ${0.1 + r1 * 0.1})`;
+        ctx.fill();
+      }
+    }
+
+    // --- the city blocks: paved panels with kerbs between the roads ----------
+    for (const b of PANELS) {
+      const bx = field.w * b.x0;
+      const by = field.h * b.y0;
+      const bw = field.w * (b.x1 - b.x0);
+      const bh = field.h * (b.y1 - b.y0);
+      if (by > view.y + view.h || by + bh < view.y) continue;
+
+      if (b.kind === 'lawn') {
+        ctx.fillStyle = '#7cc76c';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.strokeRect(bx + 3, by + 3, bw - 6, bh - 6);
+      } else {
+        // The kerb shadow first, then the slab, then a pale kerb line.
+        ctx.fillStyle = 'rgba(30, 40, 30, 0.18)';
+        ctx.fillRect(bx - 5, by - 5, bw + 10, bh + 10);
+        ctx.fillStyle = b.kind === 'asphalt' ? '#a7abbc' : '#ddd8ca';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.strokeRect(bx + 2.5, by + 2.5, bw - 5, bh - 5);
+      }
+
+      // Parking bay lines on the asphalt block, matching the car ranks.
+      if (b.kind === 'asphalt') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        for (const rowY of [0.275, 0.325]) {
+          const ry = field.h * rowY;
+          for (let i = 0; i <= 11; i++) {
+            const lx = field.w * (0.09 + i * 0.075);
+            ctx.fillRect(lx - 2.5, ry, 5, field.h * 0.042);
+          }
         }
       }
     }
 
     // --- the roads ------------------------------------------------------------
     const half = ROAD_WIDTH / 2;
-    ctx.fillStyle = 'rgba(64, 66, 92, 0.5)';
+    ctx.fillStyle = '#575b70';
     for (const yf of ROAD_YS) {
       ctx.fillRect(0, field.h * yf - half, field.w, ROAD_WIDTH);
     }
     const ax = field.w * AVENUE.x;
     ctx.fillRect(ax - half, field.h * AVENUE.y0, ROAD_WIDTH, field.h * (AVENUE.y1 - AVENUE.y0));
 
-    // Dashed centre lines, clipped to the visible stretch.
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    // Centre dashes, clipped to the visible stretch.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
     const DASH = 44;
     const GAP = 46;
     for (const yf of ROAD_YS) {
@@ -288,13 +312,37 @@ export class Background {
       }
     }
 
-    // The edge of the world: a soft, friendly boundary rather than a wall.
-    ctx.lineWidth = 14;
-    ctx.strokeStyle = hsla(p.hillNear[0], p.hillNear[1], Math.max(10, p.hillNear[2] - 8), 0.5);
-    ctx.strokeRect(7, 7, field.w - 14, field.h - 14);
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = hsla(p.cloud[0], p.cloud[1], p.cloud[2], 0.35);
-    ctx.strokeRect(24, 24, field.w - 48, field.h - 48);
+    // Zebra crossings where the avenue meets each cross-street.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    for (const yf of ROAD_YS) {
+      const ry = field.h * yf;
+      if (ry < view.y - 120 || ry > view.y + view.h + 120) continue;
+      for (const side of [-1, 1]) {
+        const cxx = ax + side * (half + 34);
+        for (let i = -2; i <= 2; i++) {
+          ctx.fillRect(cxx - 11, ry - half + 8 + (i + 2) * ((ROAD_WIDTH - 16) / 5), 22, 9);
+        }
+      }
+    }
+
+    // The edge of the world: a hedge line rather than a wall.
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = 'rgba(43, 84, 40, 0.75)';
+    ctx.strokeRect(8, 8, field.w - 16, field.h - 16);
+  }
+
+  /**
+   * Day and night over the whole scene, screen space, drawn above the world:
+   * noon is clear, sunset warms it, night lays a deep blue over the city.
+   * Uses the palette's own brightness, so it follows the drifting sky clock.
+   */
+  drawLightTint(ctx, world) {
+    const p = this.palette();
+    const darkness = clamp(1 - p.top[2] / 70, 0, 1);
+    const alpha = darkness * 0.34;
+    if (alpha < 0.01) return;
+    ctx.fillStyle = hsla(p.top[0], 55, 26, alpha);
+    ctx.fillRect(0, 0, world.w, world.h);
   }
 
   #drawSky(ctx, w, h, p) {

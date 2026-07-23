@@ -142,22 +142,65 @@ class AudioEngine {
   /* --- the sounds --------------------------------------------------------- */
 
   /**
-   * The gulp — the signature sound. A downward swallow-sweep with a soft
-   * thunk under it and a tiny satisfied blip on the end. Pitch scales
-   * inversely with size, so a strawberry goes *glp* and a house goes *GLOMP*.
-   * That alone makes clearing a whole world sound musical.
+   * The gulp — the signature sound, built like a real swallow: a soft wet
+   * click as the thing tips in, a resonant throat-glide down as it goes, and
+   * a low body thump as it lands. Pitch scales inversely with size, so a
+   * flower goes *glup* and a building goes *GLOMPH*.
    * @param {number} sizeNorm 0 (tiny) .. 1 (the landmark)
    */
   gulp(sizeNorm = 0) {
     if (!this.ready) return;
     const norm = clamp(sizeNorm, 0, 1);
-    const f0 = lerp(700, 260, norm);
     const t = this.t;
 
-    this.#tone(t, 0.16, { type: 'sine', freq: f0, sweepTo: f0 * 0.45, gain: 0.45, attack: 0.006 });
-    this.#noise(t, 0.06, { freq: f0 * 0.9, q: 1.2, gain: 0.16 });
-    // The little "down the hatch!" blip after the swallow lands.
-    this.#tone(t + 0.14, 0.08, { type: 'sine', freq: f0 * 1.3, sweepTo: f0 * 1.9, gain: 0.12, attack: 0.005 });
+    // The wet click at the lip of the hole.
+    this.#noise(t, 0.03, { type: 'bandpass', freq: lerp(1400, 700, norm), q: 2.5, gain: 0.16 });
+
+    // The throat: a dark glide down through a closing resonant filter — this
+    // is the "glup" itself, and it deepens with the size of the bite.
+    this.#voiced(t + 0.015, 0.16 + norm * 0.12, {
+      type: 'triangle',
+      from: lerp(330, 160, norm),
+      to: lerp(90, 45, norm),
+      filterFrom: lerp(900, 500, norm),
+      filterTo: 140,
+      q: 5,
+      gain: 0.4,
+      attack: 0.008,
+    });
+
+    // The landing, felt more than heard. Bigger bites land harder.
+    this.#tone(t + 0.05, 0.16 + norm * 0.1, {
+      type: 'sine', freq: lerp(130, 80, norm), sweepTo: 40, gain: 0.3 + norm * 0.25, attack: 0.01,
+    });
+  }
+
+  /** People being scooped up go "wheee!" — a fairground squeal, all comedy. */
+  whee() {
+    if (!this.ready) return;
+    const { ctx, master } = this;
+    const t = this.t;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(420, t);
+    osc.frequency.exponentialRampToValueAtTime(1050, t + 0.28);
+    osc.frequency.exponentialRampToValueAtTime(760, t + 0.4);
+
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 9;
+    const depth = ctx.createGain();
+    depth.gain.value = 30;
+    lfo.connect(depth); depth.connect(osc.frequency);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+
+    osc.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + 0.47);
+    lfo.start(t); lfo.stop(t + 0.47);
   }
 
   /** One step of the eat-streak melody. Climbs the pentatonic run and holds. */
@@ -452,6 +495,7 @@ class AudioEngine {
       case 'vroom': this.vroom(); return true;
       case 'crunch': this.crunch(); return true;
       case 'boing': this.boing(); return true;
+      case 'whee': this.whee(); return true;
       case 'whoosh': this.whoosh(0.5); return true;
       default: return false;
     }

@@ -117,17 +117,30 @@ export class Hole {
 
   get speed() { return Math.hypot(this.vx, this.vy); }
 
-  draw(ctx) {
-    const H = CONFIG.hole;
+  /** The mouth's current ellipse in world coordinates — main.js clips
+      sinking things against this, so they visibly drop BELOW the rim. */
+  get mouthEllipse() {
     const r = Math.max(6, this.rShown);
+    return { x: this.x, y: this.y + this.#bob(), rx: r * 0.99, ry: r * 0.81 };
+  }
+
+  #bob() {
     const resting = !this.touching && this.speed < 12;
-    const bob = resting ? Math.sin(this.t * 1.8) * H.idleBob : 0;
+    return resting ? Math.sin(this.t * 1.8) * CONFIG.hole.idleBob : 0;
+  }
 
-    const squash = this.gulpT > 0 ? Math.sin(this.gulpT * Math.PI) * H.gulpSquash : 0;
-
+  #enter(ctx) {
+    const squash = this.gulpT > 0 ? Math.sin(this.gulpT * Math.PI) * CONFIG.hole.gulpSquash : 0;
     ctx.save();
-    ctx.translate(this.x, this.y + bob);
+    ctx.translate(this.x, this.y + this.#bob());
     ctx.scale(1 + squash, 1 - squash * 0.8);
+    return Math.max(6, this.rShown);
+  }
+
+  /** Everything below ground level: shadow, the dark, the swirls. Things
+      being swallowed draw on top of this — and drawRim then covers them. */
+  drawPit(ctx) {
+    const r = this.#enter(ctx);
 
     // --- soft ground shadow so the hole sits IN the world, not on it ---------
     ctx.beginPath();
@@ -155,8 +168,14 @@ export class Hole {
       ctx.stroke();
     }
 
-    // --- glowing rim, cycling gently through the rainbow ---------------------
+    ctx.restore();
+  }
+
+  /** The rim glow and the eyes — drawn OVER anything falling in. */
+  drawRim(ctx) {
+    const r = this.#enter(ctx);
     const hue = (this.t * 40) % 360;
+
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.beginPath();
@@ -175,6 +194,11 @@ export class Hole {
     this.#drawEyes(ctx, r);
 
     ctx.restore();
+  }
+
+  draw(ctx) {
+    this.drawPit(ctx);
+    this.drawRim(ctx);
   }
 
   /** Two googly eyes on the upper rim, glancing where the hole is headed. */

@@ -8,7 +8,7 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '3.0.0',
+  version: '3.1.0',
 
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Hungry Hole". */
@@ -39,9 +39,10 @@ export const CONFIG = {
                            // takes a satisfying while to reach
   },
   camera: {
-    holeScreenFrac: 0.085, // the hole tries to appear this fraction of screen height
+    holeScreenFrac: 0.07,  // the hole tries to appear this fraction of screen height
     minZoom: 0.42,         // fully grown: see this much more world (smaller = wider)
-    maxZoom: 0.85,         // starting view is already a little pulled back
+    maxZoom: 0.8,          // starting view is already pulled back — the city
+                           // should feel like a place, not a close-up
     posK: 5.5,             // how snappily the camera catches up to the hole
     zoomK: 2.2,            // how smoothly the zoom glides between sizes
     lookAhead: 0.22,       // seconds of velocity the camera leads by
@@ -59,7 +60,7 @@ export const CONFIG = {
      hole's direction and speed, wherever on the glass the finger happens to
      be. Hold still and the hole eases to a stop; let go and it glides out. */
   hole: {
-    baseRadius: 28,        // how small it starts in a fresh city: only the very
+    baseRadius: 20,        // how small it starts in a fresh city: only the very
                            // tiniest things fit at first
     mouthRatio: 1.0,       // a thing fits when its size <= hole radius * this
     maxSpeed: 560,         // world units per second, plus a little as it grows
@@ -75,13 +76,12 @@ export const CONFIG = {
   /* --- the things it eats -------------------------------------------------- */
   things: {
     // Seven sizes, flowers to stadium. The last one is the landmark.
-    tierSizes: [22, 34, 50, 72, 100, 135, 180],
+    // Deliberately small against the screen: the city should read as a busy
+    // place seen from above, not a wall of stickers.
+    tierSizes: [16, 26, 38, 54, 76, 105, 140],
     overlapFactor: 1.0,    // eating starts when the hole's edge reaches a thing...
     thingHit: 0.8,         // ...this deep into its body. Generous on purpose:
                            // he aims AT things, he does not centre on them
-    swallowBase: 0.3,      // seconds to disappear down the hole...
-    swallowPerSize: 1 / 600, // ...plus this much per unit of size
-    spin: 9,               // how fast a swallowed thing spirals, radians/second
     wobbleCooldown: 0.8,   // seconds between "too big!" wobbles per thing
     runnerSpeed: 130,      // how fast the runners scoot away (the hole is faster)
     runnerFleeRadius: 260, // how close the hole gets before a runner bolts

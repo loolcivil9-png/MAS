@@ -40,12 +40,23 @@ because the small things live at the bottom and the big things at the top:
 
 | District | What lives there |
 | --- | --- |
-| **The park** (bottom) | Flower beds in rows, daisies, balls, birds, park chairs, trees, a fountain — and the small hole starts here |
-| **The market** | Crates and baskets by the rank, boxes of apples, oranges and strawberries, trolleys, scooters, market cats |
-| **The little houses** | A tidy grid of homes with garden trees, postboxes and dogs |
-| **The busy streets** | Ranks of parked cars and taxis, buses, trucks, a fire engine, traffic lights along the road, a huddle of striped barriers |
+| **The park** (bottom) | Flower beds and sunflower rows, daisies, balls, birds, children playing, park chairs, trees, a fountain — and the small hole starts here |
+| **The market** | Crates and baskets by the rank, boxes of apples, oranges and strawberries, trolleys, scooters, shoppers, market cats |
+| **The little houses** | A tidy grid of homes with garden flowers, trees, postboxes, dogs and neighbours |
+| **The busy streets** | An asphalt parking block with painted bays and ranks of cars and taxis, buses, trucks, a fire engine, traffic lights, builders around their barriers, walkers and joggers, a police officer |
 | **Downtown** (top) | A block of big buildings — offices, the shop, the bank, the hotel, the church, the school |
 | **The stadium** | The one giant landmark at the very top. The last bite of all. |
+
+The ground is a proper top-down map: solid land, paved city blocks with
+kerbs, roads with centre dashes and zebra crossings, a lawn under the park —
+no floating scenery. Day slides into night as a light tint over the whole
+city. **The people of the city stroll about their day**, scatter with a comic
+"wheee!" when the hole rumbles close, and are always catchable.
+
+**Eating is physics, not an animation**: the pit's pull takes hold of a
+thing, it tips over as it slides in, and then it visibly sinks *below the
+rim*, clipped inside the darkness — with a wet, throaty *glup* built like a
+real swallow (click, glide, thump), pitched deeper the bigger the bite.
 
 Things come in **armies** — a bed of seven flowers, a row of four parked
 cars, a block of six buildings — because a line of the same thing begs to be

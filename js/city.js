@@ -60,6 +60,17 @@ const T = {
   dog: { glyph: '🐕', name: 'Dog', call: 'woof', runner: true },
   cat: { glyph: '🐈', name: 'Cat', call: 'meow', runner: true },
 
+  // The people of the city. They stroll about their day, scatter with a
+  // comic "wheee!" when the hole comes close, and are always catchable.
+  boy: { glyph: '👦', name: 'Boy', call: 'whee', runner: true, wander: true },
+  girl: { glyph: '👧', name: 'Girl', call: 'whee', runner: true, wander: true },
+  man: { glyph: '👨', name: 'Man', call: 'whee', runner: true, wander: true },
+  woman: { glyph: '👩', name: 'Woman', call: 'whee', runner: true, wander: true },
+  walker: { glyph: '🚶', name: 'Person', call: 'whee', runner: true, wander: true },
+  jogger: { glyph: '🏃', name: 'Jogger', call: 'whee', runner: true, wander: true },
+  officer: { glyph: '👮', name: 'Police officer', call: 'whee', runner: true, wander: true },
+  builder: { glyph: '👷', name: 'Builder', call: 'whee', runner: true, wander: true },
+
   chair: { glyph: '🪑', name: 'Chair' },
   trolley: { glyph: '🛒', name: 'Trolley' },
   scooter: { glyph: '🛵', name: 'Scooter', call: 'vroom' },
@@ -126,6 +137,19 @@ export const ROAD_WIDTH = 80;
 /** The main avenue runs down the middle from the first road to the park. */
 export const AVENUE = { x: 0.5, y0: 0.24, y1: 0.80 };
 
+/**
+ * The city blocks, as fractions of the city — the ground renderer draws each
+ * as a pale paved (or lawn) panel, which is what makes the map read as real
+ * blocks between real roads rather than things floating in space.
+ */
+export const PANELS = [
+  { x0: 0.05, y0: 0.075, x1: 0.95, y1: 0.225, kind: 'pavement' }, // downtown
+  { x0: 0.05, y0: 0.265, x1: 0.95, y1: 0.425, kind: 'asphalt' },  // the parking streets
+  { x0: 0.05, y0: 0.455, x1: 0.95, y1: 0.605, kind: 'pavement' }, // the little houses
+  { x0: 0.05, y0: 0.635, x1: 0.95, y1: 0.785, kind: 'pavement' }, // the market
+  { x0: 0.03, y0: 0.815, x1: 0.97, y1: 0.985, kind: 'lawn' },     // the park
+];
+
 /* --- generation -------------------------------------------------------------- */
 
 /**
@@ -167,12 +191,18 @@ export function generateCity(seed) {
 
   /* --- PARK (bottom): where a small hole begins ---------------------------- */
   row(T.flower, 0, 'park', W * 0.5, H * 0.845, 7, W * 0.11, 40);
+  row(T.daisy, 0, 'park', W * 0.36, H * 0.9, 6, W * 0.09);
   row(T.tulip, 0, 'park', W * 0.5, H * 0.965, 7, W * 0.11, -40);
-  cluster(T.daisy, 0, 'park', W * 0.2, H * 0.9, 6, 110);
-  cluster(T.ball, 0, 'park', W * 0.82, H * 0.885, 3, 90);
-  cluster(T.bird, 0, 'park', W * 0.62, H * 0.925, 3, 130);
-  row(T.chair, 2, 'park', W * 0.24, H * 0.955, 2, 130);
-  row(T.chair, 2, 'park', W * 0.78, H * 0.955, 2, 130);
+  cluster(T.daisy, 0, 'park', W * 0.16, H * 0.9, 5, 90);
+  cluster(T.flower, 0, 'park', W * 0.85, H * 0.93, 5, 90);
+  cluster(T.ball, 0, 'park', W * 0.82, H * 0.875, 3, 80);
+  cluster(T.bird, 0, 'park', W * 0.66, H * 0.925, 3, 110);
+  add(T.boy, 1, 'park', W * 0.3, H * 0.87);
+  add(T.girl, 1, 'park', W * 0.68, H * 0.88);
+  add(T.boy, 1, 'park', W * 0.42, H * 0.94);
+  add(T.girl, 1, 'park', W * 0.6, H * 0.955);
+  row(T.chair, 2, 'park', W * 0.24, H * 0.955, 2, 110);
+  row(T.chair, 2, 'park', W * 0.78, H * 0.955, 2, 110);
   add(T.tree, 3, 'park', W * 0.09 + jit(), H * 0.86 + jit());
   add(T.tree, 3, 'park', W * 0.91 + jit(), H * 0.845 + jit());
   add(T.tree, 3, 'park', W * 0.13 + jit(), H * 0.975 + jit());
@@ -188,8 +218,11 @@ export function generateCity(seed) {
   row(T.trolley, 2, 'market', W * 0.5, H * 0.775, 3, W * 0.1);
   add(T.scooter, 2, 'market', W * 0.88, H * 0.7 + jit());
   add(T.scooter, 2, 'market', W * 0.09, H * 0.69 + jit());
-  add(T.cat, 1, 'market', W * 0.35, H * 0.675, 0);
-  add(T.cat, 1, 'market', W * 0.62, H * 0.74, 0);
+  add(T.cat, 1, 'market', W * 0.35, H * 0.675);
+  add(T.cat, 1, 'market', W * 0.62, H * 0.74);
+  add(T.woman, 1, 'market', W * 0.25, H * 0.7);
+  add(T.woman, 1, 'market', W * 0.6, H * 0.685);
+  add(T.man, 1, 'market', W * 0.78, H * 0.73);
 
   /* --- LITTLE HOUSES: a tidy grid of homes --------------------------------- */
   for (const [i, hx] of [0.16, 0.5, 0.84].entries()) {
@@ -202,16 +235,31 @@ export function generateCity(seed) {
   add(T.postbox, 2, 'houses', W * 0.72, H * 0.585 + jit());
   add(T.dog, 1, 'houses', W * 0.42, H * 0.56);
   add(T.dog, 1, 'houses', W * 0.58, H * 0.5);
+  add(T.man, 1, 'houses', W * 0.36, H * 0.59);
+  add(T.woman, 1, 'houses', W * 0.64, H * 0.47);
+  cluster(T.tulip, 0, 'houses', W * 0.14, H * 0.475, 4, 70);
+  cluster(T.flower, 0, 'houses', W * 0.86, H * 0.59, 4, 70);
   add(T.car, 3, 'houses', W * 0.08, H * 0.53 + jit());
+  add(T.car, 3, 'houses', W * 0.92, H * 0.53 + jit());
 
-  /* --- BUSY STREETS: ranks of parked traffic ------------------------------- */
-  row(T.car, 3, 'streets', W * 0.26, H * 0.3, 4, W * 0.135);
-  row(T.taxi, 3, 'streets', W * 0.74, H * 0.3, 4, W * 0.135);
-  row(T.bus, 4, 'streets', W * 0.3, H * 0.385, 2, W * 0.26);
-  row(T.truck, 4, 'streets', W * 0.74, H * 0.385, 2, W * 0.22);
-  add(T.fireTruck, 4, 'streets', W * 0.5, H * 0.34 + jit());
-  row(T.light, 1, 'streets', W * 0.5, H * 0.258, 5, W * 0.19);
-  cluster(T.barrier, 1, 'streets', W * 0.5, H * 0.41, 4, 100);
+  /* --- BUSY STREETS: ranks of parked traffic and people on the pavement ---- */
+  row(T.car, 3, 'streets', W * 0.25, H * 0.295, 5, W * 0.1);
+  row(T.taxi, 3, 'streets', W * 0.75, H * 0.295, 5, W * 0.1);
+  row(T.car, 3, 'streets', W * 0.3, H * 0.345, 4, W * 0.11);
+  row(T.taxi, 3, 'streets', W * 0.76, H * 0.345, 3, W * 0.11);
+  row(T.bus, 4, 'streets', W * 0.3, H * 0.395, 2, W * 0.26);
+  row(T.truck, 4, 'streets', W * 0.74, H * 0.395, 2, W * 0.22);
+  add(T.fireTruck, 4, 'streets', W * 0.5, H * 0.37 + jit());
+  row(T.light, 1, 'streets', W * 0.5, H * 0.256, 5, W * 0.19);
+  cluster(T.barrier, 1, 'streets', W * 0.42, H * 0.418, 4, 80);
+  add(T.builder, 1, 'streets', W * 0.36, H * 0.42);
+  add(T.builder, 1, 'streets', W * 0.49, H * 0.428);
+  add(T.walker, 1, 'streets', W * 0.14, H * 0.33);
+  add(T.walker, 1, 'streets', W * 0.86, H * 0.33);
+  add(T.walker, 1, 'streets', W * 0.55, H * 0.31);
+  add(T.jogger, 1, 'streets', W * 0.2, H * 0.4);
+  add(T.jogger, 1, 'streets', W * 0.68, H * 0.42);
+  add(T.officer, 1, 'streets', W * 0.5, H * 0.27);
 
   /* --- DOWNTOWN: the block of big buildings -------------------------------- */
   row(T.office, 5, 'downtown', W * 0.24, H * 0.125, 2, W * 0.24);

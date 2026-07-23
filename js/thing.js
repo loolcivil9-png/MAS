@@ -47,8 +47,8 @@ export class Thing {
   }
 
   /**
-   * @param {{glyph: string, name: string, call?: string, runner?: boolean}} entry
-   * @param {number} tier 0..4 (4 = the landmark)
+   * @param {{glyph: string, name: string, call?: string, runner?: boolean, wander?: boolean}} entry
+   * @param {number} tier 0..6 (6 = the landmark)
    * @param {number} size logical radius — the number that decides if it fits
    */
   spawn(entry, tier, size, x, y) {
@@ -57,15 +57,16 @@ export class Thing {
     this.name = entry.name;
     this.call = entry.call ?? null;
     this.runner = !!entry.runner;
+    this.wander = !!entry.wander;
     this.tier = tier;
     this.size = size;
     this.x = x;
     this.y = y;
 
     this.state = 'idle';         // 'idle' | 'swallow'
-    this.golden = false;         // set by the level builder
-    this.magnet = false;         // set by the level builder
-    this.growth = 0;             // set by the level builder (normalized share)
+    this.golden = false;         // set by the city builder
+    this.magnet = false;         // set by the city builder
+    this.growth = 0;             // set by the city builder (normalized share)
 
     this.t = rand(0, 100);       // phase offset so the world doesn't wobble in sync
     this.introT = 0;
@@ -73,25 +74,32 @@ export class Thing {
     this.boinkCooldown = 0;
     this.fleeVx = 0;
     this.fleeVy = 0;
+    this.headA = rand(0, TAU);   // wanderers stroll in this direction...
+    this.headT = 0;              // ...and change their mind when this runs out
 
     this.swallowT = 0;
-    this.swallowDur = 1;
-    this.swAngle = 0;
-    this.swDist = 0;
+    this.depth = 0;              // 0 above ground .. 1 fully down the hole
+    this.tumble = 0;
+    this.tumbleV = 0;
 
     this.sprite = getSprite(this.glyph, size);
   }
 
-  /** Down the hatch. Captures where it is relative to the (moving) hole. */
-  startSwallow(hole) {
+  /**
+   * Down the hatch — as physics, not as an animation. The pit pulls the thing
+   * in with ever-stronger gravity; it tips over as it slides, and once it is
+   * over the mouth it SINKS, drawn clipped under the hole's rim by main.js.
+   */
+  startSwallow() {
     this.state = 'swallow';
-    const dx = this.x - hole.x;
-    const dy = this.y - hole.y;
-    this.swAngle = Math.atan2(dy, dx);
-    this.swDist = Math.hypot(dx, dy);
     this.swallowT = 0;
-    this.swallowDur = CONFIG.things.swallowBase + this.size * CONFIG.things.swallowPerSize;
+    this.depth = 0;
+    this.tumble = 0;
+    this.tumbleV = (Math.random() < 0.5 ? -1 : 1) * rand(2.2, 4);
   }
+
+  /** True once it is falling below the rim — main.js switches to clipped drawing. */
+  get sinking() { return this.state === 'swallow' && this.depth > 0.02; }
 
   /** The friendly "not yet, still too big!" reaction. */
   wobble() {
@@ -112,22 +120,50 @@ export class Thing {
 
     if (this.state === 'swallow') {
       this.swallowT += dt;
-      this.swAngle += T.spin * dt;
-      const p = clamp(this.swallowT / this.swallowDur, 0, 1);
-      // Tracks the live hole centre — he may still be dragging it around.
-      const d = this.swDist * (1 - easeInCubic(p));
-      this.x = hole.x + Math.cos(this.swAngle) * d;
-      this.y = hole.y + Math.sin(this.swAngle) * d;
-      if (p >= 1) {
+
+      // The pit's gravity, strengthening as it takes hold — and tracking the
+      // live hole centre, since he may still be dragging it around.
+      const dx = hole.x - this.x;
+      const dy = hole.y - this.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const pull = 1600 + 2600 * this.swallowT;
+      this.fleeVx += (dx / dist) * pull * dt;
+      this.fleeVy += (dy / dist) * pull * dt;
+      const sp = Math.hypot(this.fleeVx, this.fleeVy);
+      if (sp > 950) {
+        this.fleeVx *= 950 / sp;
+        this.fleeVy *= 950 / sp;
+      }
+      this.x += this.fleeVx * dt;
+      this.y += this.fleeVy * dt;
+
+      // Tipping over as it slides, then dropping once it is over the mouth.
+      this.tumble += this.tumbleV * Math.min(1, this.swallowT * 2.5) * dt;
+      if (dist < hole.rShown * 0.6) this.depth += dt * (2.2 + this.swallowT * 2);
+
+      if (this.depth >= 1 || this.swallowT > 2.6) {
         this.active = false;
         return 'eaten';
       }
       return null;
     }
 
+    if (this.wander) this.#stroll(dt, bounds);
     if (this.runner) this.#flee(dt, bounds, hole);
 
     return null;
+  }
+
+  /** People amble about their day: a slow stroll, a new direction now and then. */
+  #stroll(dt, bounds) {
+    this.headT -= dt;
+    if (this.headT <= 0) {
+      this.headA += rand(-1.3, 1.3);
+      this.headT = rand(1.2, 3.2);
+    }
+    this.x += Math.cos(this.headA) * 26 * dt;
+    this.y += Math.sin(this.headA) * 26 * dt;
+    this.clampInto(bounds);
   }
 
   /**
@@ -184,17 +220,23 @@ export class Thing {
       rot += Math.sin(this.wobbleT * 26) * 0.18 * this.wobbleT;
     }
 
+    let sinkY = 0;
+    let alpha = 1;
     if (this.state === 'swallow') {
-      const p = clamp(this.swallowT / this.swallowDur, 0, 1);
-      scale *= 1 - easeInCubic(p);
-      rot += p * 2.4; // a visible twirl on the way down
+      const d = easeInCubic(clamp(this.depth, 0, 1));
+      // A slight squeeze on the way in, then real shrink as it drops from view.
+      scale *= (1 - 0.12 * Math.min(1, this.swallowT * 3)) * (1 - 0.85 * d);
+      rot += this.tumble;
+      sinkY = d * this.size * 1.7;   // falling below the rim
+      alpha = 1 - d * 0.65;          // and into the dark
     }
 
     if (scale <= 0.01) return;
 
     const dim = this.sprite.logicalDim;
     ctx.save();
-    ctx.translate(this.x, this.y);
+    ctx.globalAlpha = alpha;
+    ctx.translate(this.x, this.y + sinkY);
 
     // Ground shadow, drawn unrotated so it stays under the thing.
     if (this.state !== 'swallow') {
