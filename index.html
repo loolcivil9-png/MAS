@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1b1145">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bubble Zoo">
+<meta name="description" content="A gentle endless bubble-popping game for very young children. Pop bubbles, meet animals and dinosaurs, and win every single time.">
+<title>Bubble Zoo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<!-- Splash. Also the audio-unlock gesture required by iOS and Android. -->
+<div id="splash">
+  <div class="splash-deco" aria-hidden="true">
+    <span style="--x:8%;  --d:0s;    --s:1.15">🦁</span>
+    <span style="--x:26%; --d:-2.3s; --s:0.85">🦕</span>
+    <span style="--x:46%; --d:-4.1s; --s:1.05">🐮</span>
+    <span style="--x:66%; --d:-1.2s; --s:0.9">🦖</span>
+    <span style="--x:86%; --d:-3.4s; --s:1.1">🐸</span>
+    <span style="--x:16%; --d:-5.6s; --s:0.75">🐧</span>
+    <span style="--x:76%; --d:-6.8s; --s:0.8">🐵</span>
+  </div>
+
+  <div class="splash-inner">
+    <h1 id="splash-title">Bubble&nbsp;Zoo</h1>
+    <p class="splash-sub">Pop the bubbles!</p>
+
+    <button id="play-btn" type="button" aria-label="Tap to play">
+      <span class="play-glyph">▶</span>
+    </button>
+
+    <p class="splash-hint">TAP TO PLAY</p>
+  </div>
+</div>
+
+<!-- Parent gate: press and hold. A 3-year-old will not hold still for 2 seconds. -->
+<button id="gate" type="button" aria-label="Grown-ups menu — press and hold">
+  <span class="gate-glyph">🔒</span>
+  <span class="gate-ring" aria-hidden="true"></span>
+</button>
+
+<div id="parent-menu" hidden>
+  <div class="pm-card" role="dialog" aria-modal="true" aria-label="Grown-ups menu">
+    <h2>Grown-ups</h2>
+
+    <label class="pm-row" for="pm-volume">
+      <span class="pm-label">🔊 Volume</span>
+      <input id="pm-volume" type="range" min="0" max="100" step="5">
+    </label>
+
+    <label class="pm-row pm-toggle" for="pm-voice">
+      <span class="pm-label">🗣️ Speaking voice</span>
+      <input id="pm-voice" type="checkbox">
+      <span class="pm-switch" aria-hidden="true"></span>
+    </label>
+
+    <p class="pm-stat" id="pm-stat"></p>
+
+    <div class="pm-actions">
+      <button id="pm-restart" type="button" class="pm-btn pm-btn-ghost">Start over</button>
+      <button id="pm-close" type="button" class="pm-btn pm-btn-primary">Back to the game</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,367 @@
+/* ---------------------------------------------------------------------------
+   Bubble Zoo — styles
+   Only the splash, the parent gate and the grown-ups menu live in the DOM.
+   Everything else is drawn on the canvas.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --ink: #1b1145;
+  --font-play: 'Baloo 2', 'Comic Sans MS', 'Chalkboard SE', 'Trebuchet MS',
+               system-ui, -apple-system, sans-serif;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+/* Hard lock the page. A toddler will swipe, pinch, long-press and drag with a
+   whole palm; none of it may scroll, zoom, select or open a callout menu. */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  background: var(--ink);
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-play);
+}
+
+body { height: 100dvh; }
+
+#stage {
+  display: block;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* ---------------------------------------------------------------- splash --- */
+
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 85% at 50% 8%, #4b2fa8 0%, #2a1a6b 45%, #150c38 100%);
+  transition: opacity .45s ease, visibility .45s;
+}
+
+#splash.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Emoji drifting up behind the title — a preview of the game itself. */
+.splash-deco {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.splash-deco span {
+  position: absolute;
+  left: var(--x);
+  bottom: -18vh;
+  font-size: clamp(2.6rem, 12vw, 4.6rem);
+  opacity: .32;
+  filter: blur(.4px);
+  transform: scale(var(--s));
+  animation: drift-up 13s linear infinite;
+  animation-delay: var(--d);
+}
+
+@keyframes drift-up {
+  0%   { transform: translate(0, 0) scale(var(--s)); opacity: 0; }
+  12%  { opacity: .34; }
+  85%  { opacity: .28; }
+  100% { transform: translate(3vw, -128vh) scale(var(--s)); opacity: 0; }
+}
+
+.splash-inner {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 0 6vw;
+  padding-top: var(--safe-t);
+  padding-bottom: var(--safe-b);
+}
+
+#splash-title {
+  margin: 0;
+  font-size: clamp(2.9rem, 15vw, 5.4rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -.01em;
+  background: linear-gradient(180deg, #fff 0%, #ffe98a 48%, #ffb347 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .28))
+          drop-shadow(0 0 26px rgba(255, 196, 92, .45));
+  animation: title-bob 3.4s ease-in-out infinite;
+}
+
+@keyframes title-bob {
+  0%, 100% { transform: translateY(0) rotate(-1.2deg); }
+  50%      { transform: translateY(-10px) rotate(1.2deg); }
+}
+
+.splash-sub {
+  margin: .6rem 0 0;
+  font-size: clamp(1rem, 4.6vw, 1.45rem);
+  font-weight: 700;
+  color: #cfc2ff;
+  letter-spacing: .04em;
+}
+
+#play-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  display: grid;
+  place-items: center;
+  margin: clamp(2rem, 8vh, 3.4rem) auto 0;
+  width: clamp(9.5rem, 42vw, 13rem);
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  touch-action: manipulation;
+  color: #fff;
+  background:
+    radial-gradient(circle at 34% 28%, #7dffb0 0%, #2fd67a 42%, #12a457 100%);
+  box-shadow:
+    0 0 0 .55rem rgba(255, 255, 255, .16),
+    0 0 0 1.05rem rgba(255, 255, 255, .07),
+    0 1.1rem 2.4rem rgba(0, 0, 0, .45),
+    inset 0 -.5rem 1.2rem rgba(0, 0, 0, .22),
+    inset 0 .5rem 1.2rem rgba(255, 255, 255, .35);
+  animation: play-pulse 1.9s ease-in-out infinite;
+}
+
+#play-btn:active { transform: scale(.94); animation: none; }
+
+.play-glyph {
+  font-size: clamp(3.2rem, 15vw, 4.6rem);
+  line-height: 1;
+  margin-left: .12em; /* optically centre the triangle */
+  text-shadow: 0 .18rem .5rem rgba(0, 0, 0, .3);
+}
+
+@keyframes play-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); }
+}
+
+.splash-hint {
+  margin: clamp(1.2rem, 4vh, 2rem) 0 0;
+  font-size: clamp(.95rem, 4vw, 1.25rem);
+  font-weight: 900;
+  letter-spacing: .22em;
+  color: #fff;
+  opacity: .82;
+}
+
+/* ----------------------------------------------------------- parent gate --- */
+
+/* Deliberately small, dim and tucked into the corner. The only way out of the
+   game, and it needs a steady two-second hold. */
+#gate {
+  position: fixed;
+  right: calc(var(--safe-r) + .35rem);
+  bottom: calc(var(--safe-b) + .35rem);
+  z-index: 20;
+  width: 3rem;
+  height: 3rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  opacity: .22;
+  touch-action: none;
+  transition: opacity .2s ease;
+}
+
+#gate.is-holding { opacity: .95; }
+#splash:not(.is-hidden) ~ #gate { display: none; }
+
+.gate-glyph {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.gate-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* --p is driven from JS during the hold. */
+  background: conic-gradient(#ffd54a calc(var(--p, 0) * 1%), transparent 0);
+  -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
+  mask: radial-gradient(circle, transparent 58%, #000 60%);
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+#gate.is-holding .gate-ring { opacity: 1; }
+
+/* ---------------------------------------------------- grown-ups menu ------- */
+
+#parent-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(12, 8, 32, .72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+#parent-menu[hidden] { display: none; }
+
+.pm-card {
+  width: min(24rem, 100%);
+  padding: 1.5rem 1.4rem 1.3rem;
+  border-radius: 1.5rem;
+  background: #fffdf7;
+  color: var(--ink);
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, .5);
+  animation: pm-in .22s cubic-bezier(.2, 1.3, .5, 1);
+}
+
+@keyframes pm-in {
+  from { transform: scale(.9) translateY(12px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+.pm-card h2 {
+  margin: 0 0 1.1rem;
+  font-size: 1.4rem;
+  font-weight: 900;
+}
+
+.pm-row {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  margin-bottom: 1.05rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.pm-label { flex: 0 0 auto; }
+
+#pm-volume {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: .55rem;
+  border-radius: 1rem;
+  background: #e5e0f4;
+  outline: none;
+}
+
+#pm-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: #6c4ce0;
+  border: 3px solid #fff;
+  box-shadow: 0 .15rem .4rem rgba(0, 0, 0, .3);
+}
+
+#pm-volume::-moz-range-thumb {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #6c4ce0;
+}
+
+.pm-toggle { cursor: pointer; justify-content: space-between; }
+.pm-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+
+.pm-switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 3.1rem;
+  height: 1.75rem;
+  border-radius: 1rem;
+  background: #cfc8e6;
+  transition: background .18s ease;
+}
+
+.pm-switch::after {
+  content: '';
+  position: absolute;
+  top: .2rem;
+  left: .2rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 .1rem .3rem rgba(0, 0, 0, .28);
+  transition: transform .18s cubic-bezier(.3, 1.4, .5, 1);
+}
+
+.pm-toggle input:checked ~ .pm-switch { background: #2fd67a; }
+.pm-toggle input:checked ~ .pm-switch::after { transform: translateX(1.35rem); }
+
+.pm-stat {
+  margin: 0 0 1.2rem;
+  padding: .7rem .85rem;
+  border-radius: .8rem;
+  background: #f3efff;
+  font-size: .92rem;
+  font-weight: 700;
+  color: #4a3b8a;
+  text-align: center;
+}
+
+.pm-actions { display: flex; gap: .6rem; }
+
+.pm-btn {
+  flex: 1;
+  padding: .85rem .6rem;
+  border: none;
+  border-radius: .9rem;
+  font-family: inherit;
+  font-size: .95rem;
+  font-weight: 900;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.pm-btn:active { transform: scale(.97); }
+.pm-btn-primary { background: #6c4ce0; color: #fff; }
+.pm-btn-ghost { background: #ece7fa; color: #5a4aa0; }
+
+/* ------------------------------------------------------------------ a11y --- */
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-deco span,
+  #splash-title,
+  #play-btn,
+  .pm-card { animation: none; }
+}
