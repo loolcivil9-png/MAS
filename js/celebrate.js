@@ -1,24 +1,26 @@
 /* ---------------------------------------------------------------------------
    Levels, and the one moment that counts as winning.
 
-     every pop        the bubble bursts — shards, a little glitter, a pop sound,
-                      and the animal's name about one time in five. That is all.
-     every 5 pops     a star flies up into the row. A chime, nothing more.
-     golden bubble    worth five bubbles toward the level. A chime and extra
-                      glitter, but deliberately no trophy.
-     5 stars = level  THE win. Fireworks, cheering, a trophy, and the whole sky
-                      changes to a new place for the next level.
-     every 5th level  the same but bigger — crown, brass fanfare, rainbow.
+     every gulp        sparkles sized to the thing, the gulp sound, sometimes
+                       the thing's own voice or its name. That is all.
+     every 1/5 eaten   a star flies up into the row. A chime, nothing more.
+     golden thing      an extra growth spurt. A chime and glitter, but
+                       deliberately no trophy.
+     first meeting     a ring of sparkles and a hello by name — small on
+                       purpose, so it never competes with the win.
+     clean plate       THE win. The whole world eaten: fireworks, cheering, a
+                       trophy, and the sky changes to a new world.
+     every 5th world   the same but bigger — crown, brass fanfare, rainbow.
 
    The point of the quiet stretch is the loud moment at the end of it. If the
-   trophy shows up every few pops it stops meaning anything, which is exactly
-   what went wrong in the first version.
+   trophy shows up every few gulps it stops meaning anything, which is exactly
+   what went wrong in the first version of the old bubble game.
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
 import { audio } from './audio.js';
 import { rand, pick } from './util.js';
-import { BIG_CHEERS, MEGA_CHEERS } from './creatures.js';
+import { BIG_CHEERS, MEGA_CHEERS } from './catalog.js';
 import { met, markDirty, flushSave } from './save.js';
 
 export class Celebrations {
@@ -30,103 +32,103 @@ export class Celebrations {
     this.background = background;
 
     // Stars already promised to the row, including any still in flight. Without
-    // this, two pops in the same moment both see the old star count and send
+    // this, two eats in the same moment both see the old star count and send
     // duplicates.
+    this.starsScheduled = 0;
+
+    // How many things this level started with — set by the level builder.
+    // The star row fills as a fraction of it, so levels can be any size.
+    this.levelTotal = 1;
+    this.eatenThisLevel = 0;
+  }
+
+  /** Called by the level builder every time a fresh world is laid out. */
+  beginLevel(totalThings) {
+    this.levelTotal = Math.max(1, totalThings);
+    this.eatenThisLevel = 0;
     this.starsScheduled = 0;
   }
 
   reset() {
     this.starsScheduled = 0;
+    this.eatenThisLevel = 0;
     this.background?.resetTo(1);
   }
 
   /**
-   * Called for every popped bubble.
-   * @param {boolean} [muteCall] a rainbow chain pops half a dozen bubbles in
-   *   under a second — only the first couple get to speak up.
+   * Called when a swallow finishes.
+   * @param {boolean} [muteVoice] a magnet feast swallows half the screen in
+   *   seconds — only the first couple of things get to speak up.
    */
-  onPop(bubble, muteCall = false) {
+  onEat(thing, muteVoice = false) {
     const { particles, hud } = this;
-    const { x, y, r, hue, creature, special } = bubble;
+    const { x, y, size, tier } = thing;
+    const hue = rand(0, 360);
 
-    // --- the pop itself: satisfying, but not a celebration -------------------
-    particles.bubbleShards(x, y, r, hue);
-    particles.sparkleBurst(x, y, hue);
-    audio.pop(r);
+    // --- the gulp's reward: satisfying, but not a celebration ----------------
+    particles.sparkleBurst(x, y, hue, 6 + tier * 4);
+    if (tier >= 2) particles.ringWave(x, y, hue, size * 0.4, size * 1.7, 0.45);
 
-    // The animal answers most pops with its own call; the voice names it on
-    // some of the rest. Never both on one pop — a woof that then announces
-    // "Dog" is a toy explaining its own joke.
+    // The thing gets its own voice on some eats; the speaking voice names it
+    // on some of the rest. Never both on one gulp.
     let called = false;
-    if (!muteCall && CONFIG.animalSounds.enabled && Math.random() < CONFIG.animalSounds.chance) {
-      called = audio.call(creature.call);
+    if (!muteVoice && thing.call && CONFIG.objectSounds.enabled
+        && Math.random() < CONFIG.objectSounds.chance) {
+      called = audio.call(thing.call);
     }
-    if (!called && !muteCall && Math.random() < CONFIG.audio.speakChance) {
-      audio.creatureSound(creature.name);
+    if (!called && !muteVoice && Math.random() < CONFIG.audio.speakChance) {
+      audio.creatureSound(thing.name);
     }
 
     hud.score++;
     markDirty();
 
-    if (!met.has(creature.name)) this.#firstMeet(creature, x, y, hue);
+    if (!met.has(thing.name)) this.#firstMeet(thing, x, y, hue);
 
-    // --- special bubbles are a shortcut, not a prize --------------------------
-    let worth = 1;
-    if (special === 'golden') {
-      worth = CONFIG.bubble.goldenWorth;
-      particles.sparkleBurst(x, y, 44, 26);
-      particles.ringWave(x, y, 44, r * 0.6, r * 3, 0.5);
+    // --- the golden thing is a growth spurt, not a prize ---------------------
+    if (thing.golden) {
+      particles.sparkleBurst(x, y, 44, 22);
+      particles.ringWave(x, y, 44, size * 0.5, size * 2.6, 0.5);
       audio.chime(4);
-    } else if (special === 'rainbow') {
-      // Worth one itself — its real prize is the whole screen popping after
-      // it, each of those counting normally. main.js runs that chain.
-      particles.sparkleBurst(x, y, hue, 26);
-      particles.ringWave(x, y, hue, r * 0.6, r * 4, 0.7);
     }
 
-    this.#advance(worth, x, y);
+    this.eatenThisLevel++;
+    this.#advance(x, y);
   }
 
   /**
-   * The first time he ever pops this creature: a small hello, sized to never
-   * compete with a level-up. Over weeks, as the long-tail creatures unlock,
-   * these become rare little events worth coming back for.
+   * The first time he ever eats this kind of thing: a small hello, sized to
+   * never compete with a clean-plate win. Over weeks, across nine worlds of
+   * contents, these keep happening long after the first session.
    */
-  #firstMeet(creature, x, y, hue) {
-    met.add(creature.name);
+  #firstMeet(thing, x, y, hue) {
+    met.add(thing.name);
     markDirty();
-    flushSave();   // a new friend is never worth losing to the write throttle
+    flushSave();   // a new discovery is never worth losing to the write throttle
 
-    const rare = creature.unlockAt >= 25;
+    const rare = thing.tier >= 3;
     this.particles.ringWave(x, y, hue, 30, rare ? 320 : 240, 0.6);
     this.particles.sparkleBurst(x, y, hue, 16);
     audio.sparkle(4);
     if (rare) this.hud.showFlash(0.7, { rainbow: true });
 
-    const name = creature.name.toLowerCase();
-    this.timers.after(0.2, () => audio.speak(`A ${name}! Hello, ${name}!`, { interrupt: rare }));
+    const name = thing.name.toLowerCase();
+    this.timers.after(0.2, () => audio.speak(`Ooh! A ${name}!`, { interrupt: rare }));
   }
 
-  /** He touched empty screen. Answer him anyway — no touch is ever ignored. */
+  /** He touched empty ground. Answer him anyway — no touch is ever ignored. */
   onMiss(x, y) {
     this.particles.sparkleBurst(x, y, rand(0, 360), 5);
   }
 
   /* --- level progress ----------------------------------------------------- */
 
-  #advance(worth, x, y) {
+  #advance(x, y) {
     const C = CONFIG.celebrate;
     const { hud, timers } = this;
 
-    // Capped, so the level cannot run past its total while the last star is
-    // still flying. That does mean the one or two bubbles he pops during that
-    // half-second do not count — invisible in practice, and much safer than
-    // letting progress spill over, which lets a hard mash chain straight into
-    // the next level and undoes the whole point of having levels.
-    hud.levelProgress = Math.min(C.bubblesPerLevel, hud.levelProgress + worth);
-
-    const perStar = C.bubblesPerLevel / C.starsPerLevel;
-    const target = Math.min(C.starsPerLevel, Math.floor(hud.levelProgress / perStar));
+    const fraction = this.eatenThisLevel / this.levelTotal;
+    const target = Math.min(C.starsPerLevel, Math.floor(fraction * C.starsPerLevel + 1e-9));
     if (target <= this.starsScheduled) return;
 
     const owed = target - this.starsScheduled;
@@ -135,8 +137,8 @@ export class Celebrations {
 
     for (let i = 0; i < owed; i++) {
       const isLast = i === owed - 1;
-      // Staggered, so a golden bubble worth several stars sends them up as a
-      // little run rather than all on the same frame.
+      // Staggered, so a magnet feast sends them up as a little run rather
+      // than all on the same frame.
       timers.after(i * 0.14, () => {
         audio.chime(3);
         hud.flyStar(x, y, () => {
@@ -159,14 +161,14 @@ export class Celebrations {
 
     hud.level++;
     hud.trophies++;
-    hud.levelProgress = 0;
     hud.clearStars();
     this.starsScheduled = 0;
     markDirty();
-    flushSave();   // a won level is never worth losing to the write throttle
+    flushSave();   // a won world is never worth losing to the write throttle
 
-    // The sky becomes somewhere new. He cannot read the level number, so this
-    // is what actually tells him he moved on.
+    // The sky becomes somewhere new — and the level builder will fill it with
+    // that world's own things. He cannot read the level number; this is what
+    // actually tells him he moved on.
     background?.setLevel(hud.level);
 
     hud.showFlash(mega ? 1.4 : 0.95, { rainbow: true });

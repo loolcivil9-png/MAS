@@ -1,78 +1,84 @@
-# Bubble Zoo
+# Hungry Hole
 
-An endless bubble-popping game for a three-year-old. Bubbles float up carrying
-animals and dinosaurs; touching one pops it, the creature leaps out **with its
-own sound** — a woof, a moo, a roar — and something good happens every single
-time.
+An eat-everything game for a three-year-old, in the spirit of hole.io but with
+all the sharp edges filed off. He drags a friendly, googly-eyed hole around a
+cheerful little world; anything small enough falls in with a satisfying gulp,
+the hole grows, and bigger and bigger things start to fit — until the whole
+world, castle and all, has gone down the hatch. Then a brand-new world arrives.
 
 Plain HTML, CSS and JavaScript. No framework, no build step, no dependencies,
-no asset files — the sounds are generated in code and the creatures are emoji.
+no asset files — the sounds are generated in code and the world is emoji.
 The whole folder is a deployable static site.
 
 ## Designed around one rule: he cannot lose
 
-- No timer, no lives, no score that goes down, no "you missed"
-- Bubbles that drift off the top leave silently — nothing marks it as a failure
-- Nothing ever speeds up. Variety increases instead: rarer creatures unlock as
-  he plays, which is the good half of difficulty with none of the frustration
-- Every touch is answered. Even a tap on empty screen makes sparkles
+- No timer, no lives, no enemies, no other holes, no "game over"
+- A thing that is still too big just wobbles with a friendly *boing* and a
+  sparkle — a promise, not a punishment. He will be back for it
+- Nothing ever gets harder. The hole only ever grows, and every level ends in
+  a win by construction
+- Every touch is answered: the hole turns and comes, and the spot sparkles
 
 And around how a three-year-old actually uses a phone:
 
-- **Smearing counts.** Dragging a finger pops every bubble along the path
-- **Ten fingers work at once.** A whole palm on the screen pops everything under it
-- **Big targets.** 120–210 px bubbles with a touch radius 35% larger than the drawing
+- **The hole chases the finger** with a soft ease — no aiming, no tapping
+  precision, no way to steer wrong
+- **Ten fingers work at once.** The newest finger wins; lifting it hands the
+  hole to the next one still down. A palm-slam is just a lot of downs
 - **No way out.** Zoom, scroll, pull-to-refresh, long-press menus and text
   selection are all disabled. The only exit is a two-second press-and-hold
 
-## Levels, and winning
+## How a level works
 
-**Passing a level is the only thing that counts as a win.** Everything between
-levels is deliberately quiet, because a trophy that shows up every few pops
-stops meaning anything — which is exactly what went wrong in the first version.
+A level is one screenful of a little world — about 30 things in five sizes,
+from strawberries and flowers up through teddies, cars and houses to one giant
+landmark. The hole starts small enough that only the tiny things fit.
 
 | When | What happens |
 | --- | --- |
-| Every pop | The bubble bursts: shards, a little glitter, a pop sound, and the animal's own call — a woof, a quack, a roar. The voice names the animal on some of the quieter pops. That is all. |
-| Every 5 pops | A star flies up into the row. A chime, nothing more. |
-| Golden bubble (~1 in 15) | Worth **five** bubbles toward the level. A chime and extra glitter — deliberately no trophy. |
-| Rainbow bubble (~1 in 45, after 40 lifetime pops) | Its colour never sits still. Popping it **pops every bubble on screen**, rippling outward from his finger, each one counting normally. |
-| First time meeting an animal | A ring of sparkles and a hello by name ("A dog! Hello, dog!"). Small on purpose — it must never compete with a level-up. |
-| Every so often (~every 35–70 pops) | A surprise crosses the sky: a flock of butterflies, a rocket, balloons, a V of birds. Pure spectacle — drawn behind the bubbles, nothing to tap, nothing to learn. |
-| **5 stars = level passed** | **The win.** Fireworks, cheering, a trophy, the voice announces the new level, and the whole sky changes. |
-| Every 5th level | The same but bigger — crown, brass fanfare, rainbow. |
+| Every gulp | The thing spirals down the hole with a pop-pitched gulp, sparkles fly, the hole squashes happily and grows a little. Some things have their own voice — cars vroom, owls hoot, rockets whoosh — and the speaking voice names things now and then. |
+| Quick gulps in a row | Each one climbs a little melody a step higher. Any pause resets it. |
+| Something still too big | A friendly wobble and a *boing*. Never a penalty. |
+| Every fifth of the world eaten | A star flies up into the row. A chime, nothing more. |
+| The golden thing | An extra-big growth spurt. A chime and glitter — deliberately no trophy. |
+| The magnet thing (from level 2) | For five seconds everything nearby that fits comes sliding in by itself. A superpower, strictly positive. |
+| Runners | A few little creatures (ladybugs, chicks, crabs, aliens…) scoot away from the hole. They are always slower than it — a funny chase, never a frustrating one. |
+| First time eating a new kind of thing | A ring of sparkles and an "Ooh! A rocket!" — small on purpose. |
+| Every so often | A surprise crosses the sky: butterflies, a rocket, balloons, a V of birds. Pure spectacle, drawn behind the game, nothing to tap. |
+| The landmark goes down | A comedy burp… |
+| **…and the world is empty** | **The win.** Fireworks, cheering, a trophy, the voice announces the new level — and the sky crossfades to a brand-new world while a fresh one is laid out. |
+| Every 5th world | The same but bigger — crown, brass fanfare, rainbow. |
 
-A level is 25 bubbles, roughly a minute and a half of play.
+**Growth is normalized at build time**: every thing's growth share is computed
+so that eating everything except the landmark always opens the mouth exactly
+wide enough for the landmark (plus a small margin). However the sizes and
+counts are tuned, progression can never dead-end.
 
-Progress reads as a row of five stars rather than a number, because he cannot
-read yet. And because he cannot read the level number either, **the world
-visibly becomes a different place** each level — bright day, sunset, night with
-stars and a moon, dawn, deep sea, candy, outer space, snow, jungle, then round
-again. The sky crossfades during the fireworks so he sees it happen rather than
-finding it already done.
+### Nine worlds
 
-**The sky also decides who comes to visit**: the night level fills with owls
-and foxes, the sea level with dolphins, whales and octopuses, the jungle with
-monkeys, tigers and parrots. Each palette in `background.js` carries a theme
-tag, and creatures in `creatures.js` can weight themselves toward a theme.
+The star row fills as the world empties, because he cannot read. And because
+he cannot read the level number either, **each level is visibly a different
+place with different things in it** — meadow, sunset town, night town, beach,
+candy land, outer space, snow, jungle, then round again. The sky palette and
+the object set change together: the beach is full of shells and sailboats, the
+snow world of snowmen and sleds, space of rockets and flying saucers.
 
 ## It remembers him
 
-Total pops, the level he reached, his trophies and **which animals he has met**
-are saved on the device (localStorage) and restored next time. That changes
-the shape of the game over weeks:
+Things eaten, worlds finished and **every kind of thing he has ever met** are
+saved on the device (localStorage) and restored next time:
 
-- Rare creatures stay unlocked once earned, and the rarest — koala, parrot,
-  whale, flamingo, camel, hedgehog, squirrel, peacock, seal, baby dragon —
-  need days of accumulated popping to appear at all. Meeting a new friend
-  stays a real event long after the first session.
-- Progress *within* a level is deliberately **not** saved. Every session opens
-  on a fresh level at zero stars, so a win is always at most a couple of
-  minutes away, and the star row is always honest.
+- The sky (and its world) opens on the level he reached, and the lifetime
+  counter keeps climbing for weeks
+- Progress *within* a level — and the hole's size — is deliberately **not**
+  saved. Every session opens on a fresh, full world with a small hole, so a
+  win is always just minutes away
 - **Start over** in the grown-ups menu wipes the save completely. The menu
-  also shows the lifetime stats: bubbles popped, levels won, animals met.
-- If storage is unavailable (private browsing, quota), the game silently plays
-  session-only — exactly as it did before saving existed.
+  also shows lifetime stats: things eaten, worlds finished, kinds met
+- Saves from the previous game in this repo (Bubble Zoo) are migrated
+  automatically — his level and trophies survive the update
+- If storage is unavailable (private browsing, quota), the game silently
+  plays session-only
 
 ## Running it
 
@@ -120,19 +126,34 @@ work with no signal at all.
 
 ## Tuning it after you have watched him play
 
-Everything worth changing is in [`js/config.js`](js/config.js) — bubble size and
-speed, how many are on screen, how generous the touch radius is, the celebration
-thresholds, the odds of a golden or rainbow bubble, how often the animals call
-out (`animalSounds.chance`), how often a surprise crosses the sky
-(`surprise.minPopsBetween` / `maxPopsBetween`), the volume and how often the
-voice speaks.
-
-Two changes worth making first:
+Everything worth changing is in [`js/config.js`](js/config.js). Two changes
+worth making first:
 
 ```js
-title: "Sami's Bubble Zoo",   // shown on the splash
+title: "Sami's Hungry Hole",  // shown on the splash
 playerName: 'Sami',           // the voice congratulates him by name
 ```
+
+Hearing his own name at the winning moment is the strongest reward in here.
+
+The dials that matter most:
+
+- `hole.baseRadius` — how small each level starts. Raise it and the mediums
+  fit sooner; lower it and the early scramble lasts longer
+- `hole.followK` — how eagerly the hole chases his finger
+- `things.counts` — things per size tier; the main "how long is a level" dial
+- `things.tierSizes` — how big each tier is on screen
+- `things.runnerSpeed` — how fast the runners flee (keep it well under the
+  hole's speed; the chase must always be winnable)
+- `special.magnetSeconds` / `magnetRadius` — how big the superpower feels
+- `objectSounds.chance` and `audio.speakChance` — how chatty the world is
+- `surprise.minEatsBetween` / `maxEatsBetween` — how often the sky surprises
+
+The per-level skies are the `PALETTES` array in
+[`js/background.js`](js/background.js); each carries a `theme` tag that picks
+the matching object set in [`js/catalog.js`](js/catalog.js) — one line per
+thing, with a name, an optional voice and an optional `runner` flag. Add,
+remove or reorder freely.
 
 ### Knowing what is deployed
 
@@ -143,48 +164,26 @@ actually landed.
 
 The service worker fetches from the network first (falling back to the cache
 after 2.5 seconds, or instantly when offline). That means a deploy shows up the
-first time he opens it, not the second — without which the version marker would
-cheerfully report the wrong number.
-
-Hearing his own name at the winning moment is the strongest reward in here.
-
-If it is too busy, lower `bubble.maxOnScreen`; `bubble.minVisible` is the hard
-floor that stops the screen ever going empty. `bubble.separationMargin` and
-`separationSpeed` control how firmly bubbles push each other apart, and
-`placementTries` is how many spots a new bubble considers before picking the
-roomiest. If he is not landing his taps, raise `bubble.hitScale`.
-**If levels feel too long or too short, change
-`celebrate.bubblesPerLevel`** — that is the main dial. `celebrate.starsPerLevel`
-sets how many stars fill along the way, and `bubble.goldenWorth` is how many
-bubbles a golden one is worth.
-
-The per-level skies are the `PALETTES` array at the top of
-[`js/background.js`](js/background.js) — add one and the game simply has one
-more level before it cycles.
-
-The cast lives in [`js/creatures.js`](js/creatures.js) — one line per animal,
-with a weight, the lifetime pop count it unlocks at, which synthesized call it
-makes (`call`, matching a recipe in `js/audio.js`), and optional per-sky
-weighting (`themes`). Add, remove or reorder freely.
+first time he opens it, not the second.
 
 ## What is where
 
 ```
 index.html              shell, splash, parent gate
 css/style.css           splash, grown-ups menu, all the touch hardening
-js/main.js              canvas sizing, game loop, bubble population, menu wiring
+js/main.js              canvas sizing, game loop, level builder, eating, menu wiring
 js/config.js            every tunable number
-js/creatures.js         the cast, plus the praise phrases
-js/bubble.js            rise, sway, hit test, and the procedural glass drawing
-js/creaturePop.js       the creature leaping out and bouncing away
+js/hole.js              the hole itself: finger-chase, growth spring, gulp, eyes
+js/thing.js             a thing in the world: idle, flee, wobble, spiral down
+js/catalog.js           what fills each world, tier by tier, plus the praise phrases
 js/particles.js         pooled confetti, glitter, shards, rings, fireworks
-js/celebrate.js         level progress, first-meet hellos, the level-up celebration
+js/celebrate.js         level progress, first-meet hellos, the clean-plate celebration
 js/hud.js               star row, trophy tally, win banner, screen flash
-js/audio.js             synthesized sound, the animal calls and the speaking voice
+js/audio.js             synthesized sound — gulps, boings, voices — and speech
 js/background.js        the per-level skies (with theme tags), sun/moon, stars, clouds, hills
 js/surprise.js          the butterflies / rocket / balloons / birds flybys
-js/save.js              what the game remembers between sessions
-js/input.js             multi-touch, drag-to-pop, gesture suppression
+js/save.js              what the game remembers between sessions (+ Bubble Zoo migration)
+js/input.js             multi-touch pointer tracking, gesture suppression
 sw.js                   offline cache
 tools/make-icons.mjs    regenerates the app icons (zero dependencies)
 ```
@@ -192,15 +191,12 @@ tools/make-icons.mjs    regenerates the app icons (zero dependencies)
 ## Known limits
 
 - **Emoji look slightly different on Android and iOS.** Fine for this purpose,
-  and `creatures.js` is structured so real illustrations can replace them by
-  changing one field per creature.
+  and `catalog.js` is one field per thing away from real illustrations.
 - **The voice is the phone's own text-to-speech**, so its quality varies by
   device. It can be switched off entirely in the grown-ups menu.
-- **The animal calls are synthesized approximations** — a cheerful cartoon woof
-  rather than a recording of a dog. They are built from the same Web Audio
-  engine as everything else, so they cost nothing to download and work
-  offline. `audio.js` still prefers a real recorded sample whenever one is
-  registered (`audio.samples`), so upgrading any call to a recording remains a
-  data change rather than a rewrite.
+- **The sounds are synthesized approximations** — a cheerful cartoon vroom
+  rather than a recording. They cost nothing to download and work offline;
+  `audio.js` still prefers a real recorded sample whenever one is registered
+  (`audio.samples`).
 - **Fullscreen does not exist on iPhone Safari.** Installing to the home screen
   achieves the same thing there.

@@ -16,11 +16,10 @@ const BANNER_OUT = 0.45;
 
 export class Hud {
   constructor() {
-    this.score = 0;          // total bubbles popped, all levels
+    this.score = 0;          // lifetime things eaten, all levels
     this.level = 1;
-    this.levelProgress = 0;  // 0 .. CONFIG.celebrate.bubblesPerLevel
     this.stars = 0;          // stars filled in the current level
-    this.trophies = 0;       // levels passed
+    this.trophies = 0;       // worlds finished
 
     this.starPop = new Array(CONFIG.celebrate.starsPerLevel).fill(0);
     this.flying = [];
@@ -32,7 +31,6 @@ export class Hud {
   reset() {
     this.score = 0;
     this.level = 1;
-    this.levelProgress = 0;
     this.stars = 0;
     this.trophies = 0;
     this.starPop.fill(0);
@@ -43,7 +41,7 @@ export class Hud {
 
   /* --- triggers ----------------------------------------------------------- */
 
-  /** A star flies from where he popped the bubble up into the star row. */
+  /** A star flies from where the thing was eaten up into the star row. */
   flyStar(fromX, fromY, onArrive) {
     this.flying.push({ x0: fromX, y0: fromY, t: 0, duration: 0.62, onArrive });
   }

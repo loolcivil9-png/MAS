@@ -4,13 +4,13 @@
    Two things matter here and nothing else does:
 
    1. Every finger counts. Pointer events give us multi-touch for free, so a
-      whole palm slapped onto the screen pops everything under it. Mashing is
-      the point, not something to defend against.
+      whole palm slapped onto the screen still reads as somewhere to go.
+      Mashing is the point, not something to defend against.
 
-   2. Smearing counts. Toddlers drag far more than they tap, so a moving finger
-      pops every bubble along its path. The path is sampled rather than tested
-      only at the endpoints, otherwise a fast swipe tunnels straight through a
-      bubble without touching it.
+   2. Smearing counts. Toddlers drag far more than they tap, so the path of a
+      moving finger is sampled rather than tested only at the endpoints —
+      the hole tracks the real shape of a fast swipe instead of a straight
+      line per frame.
    --------------------------------------------------------------------------- */
 
 const SAMPLE_STEP = 26;   // logical units between hit tests along a drag
@@ -19,7 +19,9 @@ const MAX_SAMPLES = 24;   // guards against a huge jump after a stall
 /**
  * @param {HTMLCanvasElement} canvas
  * @param {(clientX: number, clientY: number) => {x: number, y: number}} toWorld
- * @param {(x: number, y: number, kind: 'down' | 'move') => void} onPoint
+ * @param {(x: number, y: number, kind: 'down' | 'move' | 'up', pointerId: number) => void} onPoint
+ *   `up` reports the finger lifting — the hole needs to know when to stop
+ *   chasing, and which of several fingers it just lost.
  */
 export function attachInput(canvas, toWorld, onPoint) {
   const last = new Map(); // pointerId -> last world position
@@ -28,7 +30,7 @@ export function attachInput(canvas, toWorld, onPoint) {
     const p = toWorld(e.clientX, e.clientY);
     last.set(e.pointerId, p);
     try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
-    onPoint(p.x, p.y, 'down');
+    onPoint(p.x, p.y, 'down', e.pointerId);
     e.preventDefault();
   };
 
@@ -46,15 +48,17 @@ export function attachInput(canvas, toWorld, onPoint) {
     let from = prev;
     for (const ev of points) {
       const to = toWorld(ev.clientX, ev.clientY);
-      sampleSegment(from, to, onPoint);
+      sampleSegment(from, to, onPoint, e.pointerId);
       from = to;
     }
     last.set(e.pointerId, from);
   };
 
   const up = (e) => {
+    const p = last.get(e.pointerId);
     last.delete(e.pointerId);
     try { canvas.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+    if (p) onPoint(p.x, p.y, 'up', e.pointerId);
   };
 
   canvas.addEventListener('pointerdown', down, { passive: false });
@@ -75,7 +79,7 @@ export function attachInput(canvas, toWorld, onPoint) {
   };
 }
 
-function sampleSegment(from, to, onPoint) {
+function sampleSegment(from, to, onPoint, pointerId) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const dist = Math.hypot(dx, dy);
@@ -83,7 +87,7 @@ function sampleSegment(from, to, onPoint) {
 
   for (let i = 1; i <= steps; i++) {
     const t = i / steps;
-    onPoint(from.x + dx * t, from.y + dy * t, 'move');
+    onPoint(from.x + dx * t, from.y + dy * t, 'move', pointerId);
   }
 }
 

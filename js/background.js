@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   The scene behind the bubbles.
+   The scene behind the game — the world the hole eats its way through.
 
    Each level has its own sky. He cannot read a level number, so the world
    visibly becoming a different place is what tells him he got somewhere — day
@@ -172,8 +172,8 @@ export class Background {
     this.blend = 1;
   }
 
-  /** The theme tag of the sky being shown (or faded toward) — biases which
-      creatures appear, so the sky change means something. */
+  /** The theme tag of the sky being shown (or faded toward) — picks which
+      world's things fill the level, so the sky change means something. */
   get theme() { return this.to.theme; }
 
   palette() {

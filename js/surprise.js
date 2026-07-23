@@ -2,8 +2,8 @@
    Surprises: every so often, something lovely just crosses the sky.
 
    A flock of butterflies, a rocket, drifting balloons, a V of birds. They are
-   pure spectacle — drawn behind the bubbles, impossible to tap, nothing to
-   learn and nothing to miss. Their only job is to make him point at the
+   pure spectacle — drawn behind everything he plays with, impossible to tap,
+   nothing to learn and nothing to miss. Their only job is to make him point at the
    screen and tell somebody.
 
    One event at a time, from a fixed member array — nothing is allocated after
@@ -32,18 +32,18 @@ export class Surprises {
       this.members.push({ glyph: '', size: 0, delay: 0, lane: 0, offset: 0, x: 0, y: 0, rot: 0, visible: false });
     }
 
-    this.popsUntil = randInt(CONFIG.surprise.minPopsBetween, CONFIG.surprise.maxPopsBetween);
+    this.eatsUntil = randInt(CONFIG.surprise.minEatsBetween, CONFIG.surprise.maxEatsBetween);
   }
 
   /**
-   * Called once per popped bubble. Fires when the counter runs out — but never
+   * Called once per eaten thing. Fires when the counter runs out — but never
    * on top of a win banner; the level-up owns that moment.
    */
-  onPop(bannerShowing) {
-    this.popsUntil--;
-    if (this.popsUntil > 0 || this.active || bannerShowing) return;
+  onEat(bannerShowing) {
+    this.eatsUntil--;
+    if (this.eatsUntil > 0 || this.active || bannerShowing) return;
     this.#start(pick(KINDS));
-    this.popsUntil = randInt(CONFIG.surprise.minPopsBetween, CONFIG.surprise.maxPopsBetween);
+    this.eatsUntil = randInt(CONFIG.surprise.minEatsBetween, CONFIG.surprise.maxEatsBetween);
   }
 
   #start(kind) {
@@ -147,7 +147,7 @@ export class Surprises {
     }
   }
 
-  /** Drawn between the sky and the bubbles, so bubbles stay the thing to touch. */
+  /** Drawn between the sky and the game, so the world stays the thing to touch. */
   draw(ctx) {
     if (!this.active) return;
     ctx.save();

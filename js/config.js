@@ -8,11 +8,11 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '1.3.0',
+  version: '2.0.0',
 
   /* Shown on the splash screen and used as the PWA name.
-     Put his name here — e.g. "Sami's Bubble Zoo". */
-  title: 'Bubble Zoo',
+     Put his name here — e.g. "Sami's Hungry Hole". */
+  title: 'Hungry Hole',
 
   /* If set, the voice says his name during the big celebrations.
      e.g. playerName: 'Sami'   →   "You did it, Sami! You win!" */
@@ -25,83 +25,91 @@ export const CONFIG = {
     maxDelta: 0.05,        // seconds; stops everything teleporting after the screen locks
   },
 
-  /* --- bubbles ------------------------------------------------------------ */
-  bubble: {
-    // A wide spread on both size and speed, so no two bubbles feel alike.
-    minRadius: 58,         // logical units. ~94 px across on a normal phone
-    maxRadius: 130,        // ~211 px across. Portrait is only ~460 wide, so going
-                           // bigger than this forces bubbles to overlap
-    minSpeed: 26,          // upward, logical units per second
-    maxSpeed: 92,
-    speedJitter: 0.26,     // ± this much on top, so size does not perfectly predict speed
-    swayAmount: 30,        // how far it drifts side to side
-    swaySpeedMin: 0.18,    // sway cycles per second
-    swaySpeedMax: 0.70,
-
-    minVisible: 4,         // hard floor: never fewer than this actually in view
-    minOnScreen: 5,        // population is topped up to sit between these
-    maxOnScreen: 6,        // (counts bubbles still climbing up from below)
-    spawnInterval: 0.34,   // seconds between spawns while topping up
-    placementTries: 18,    // candidate positions tested; the roomiest one wins
-    separationMargin: 1.12, // aim for a visible gap, not merely "not touching"
-    separationSpeed: 155,   // how firmly overlapping bubbles push each other apart
-    hitScale: 1.35,        // touch radius vs. drawn radius. He does not need to be accurate
-    goldenChance: 1 / 15,  // how often a golden bubble appears
-    goldenWorth: 5,        // a golden bubble counts as this many bubbles toward the level
-    rainbowChance: 1 / 45, // how often a rainbow bubble appears (pops the whole screen)
-    rainbowUnlockPops: 40, // no rainbows until he has popped this many, ever
+  /* --- the hole ------------------------------------------------------------ */
+  hole: {
+    baseRadius: 40,        // how small it starts each level: only tier-1 fits at first
+    mouthRatio: 1.0,       // a thing fits when its size <= hole radius * this
+    followK: 9,            // how eagerly it chases his finger (higher = snappier)
+    springK: 130,          // the boing when it grows...
+    springDamp: 0.86,      // ...and how quickly the boing settles
+    gulpSquash: 0.2,       // how hard it squashes when it swallows
+    idleBob: 6,            // gentle breathing while nobody is touching the screen
   },
 
-  /* --- freed creatures ---------------------------------------------------- */
-  creature: {
-    popUpSpeedMin: 190,    // how hard it leaps out of the popped bubble
-    popUpSpeedMax: 330,
-    sideSpeed: 130,
-    gravity: 900,
-    bounce: 0.55,          // energy kept per bounce
-    maxBounces: 2,
-    lifetime: 2.4,         // seconds before it drifts away
-    fadeTime: 0.55,
+  /* --- the things it eats -------------------------------------------------- */
+  things: {
+    tierSizes: [30, 48, 72, 104, 150],  // logical radius per tier; tier 5 is the landmark
+    counts: [12, 8, 5, 3, 1],           // how many of each tier fill a level
+    placementTries: 18,    // candidate positions tested; the roomiest one wins
+    hudBand: 130,          // nothing spawns behind the star row at the top
+    overlapFactor: 1.0,    // eating starts when the hole's edge reaches a thing...
+    thingHit: 0.8,         // ...this deep into its body. Generous on purpose:
+                           // he aims AT things, he does not centre on them
+    swallowBase: 0.3,      // seconds to disappear down the hole...
+    swallowPerSize: 1 / 600, // ...plus this much per unit of size
+    spin: 9,               // how fast a swallowed thing spirals, radians/second
+    wobbleCooldown: 0.8,   // seconds between "too big!" wobbles per thing
+    runnerSpeed: 130,      // how fast the runners scoot away (the hole is faster)
+    runnerFleeRadius: 260, // how close the hole gets before a runner bolts
+    introTime: 0.4,        // seconds for a fresh world to swell into view
+    landmarkFitMargin: 1.06, // the mouth ends up this much bigger than it needs
+  },
+
+  /* --- special things ------------------------------------------------------- */
+  special: {
+    goldenGrowthMult: 2.5, // the golden thing grows the hole this much extra
+    magnetFromLevel: 2,    // the magnet appears from this level on
+    magnetSeconds: 5,      // how long everything nearby slides in on its own
+    magnetRadius: 450,     // how far the magnet reaches
+    magnetAccel: 900,      // how hard it pulls
+  },
+
+  /* --- the eat-streak ------------------------------------------------------- */
+  /* Quick successive gulps climb a little melody. Any pause resets it. */
+  streak: {
+    window: 1.2,           // seconds between eats that still count as a streak
+    maxStep: 9,            // top of the run; it holds there while he keeps going
   },
 
   /* --- levels and celebrations -------------------------------------------- */
-  /* The trophy is now the LEVEL, and nothing else in the game earns one.
-     Between levels the game stays deliberately quiet, so that when the
+  /* The trophy is the LEVEL — a whole world eaten — and nothing else earns
+     one. Between levels the game stays deliberately quiet, so that when the
      fireworks do arrive they mean something. */
   celebrate: {
-    bubblesPerLevel: 25,   // roughly a minute and a half of play
-    starsPerLevel: 5,      // one star fills every bubblesPerLevel / starsPerLevel pops
-    megaEveryLevels: 5,    // every 5th level earns the crown and the brass fanfare
+    starsPerLevel: 5,      // a star fills for every fifth of the world eaten
+    megaEveryLevels: 5,    // every 5th world earns the crown and the brass fanfare
   },
 
-  /* --- animal calls -------------------------------------------------------- */
-  /* Each creature has a synthesized call — a woof, a moo, a roar. Played on
-     most pops; the speaking voice covers the rest, never both on one pop. */
-  animalSounds: {
+  /* --- thing sounds --------------------------------------------------------- */
+  /* Some things have their own voice — cars vroom, owls hoot, rockets whoosh.
+     Played on this fraction of eats, on top of the gulp. */
+  objectSounds: {
     enabled: true,
-    chance: 0.85,          // fraction of pops that play the animal's call
+    chance: 0.5,
   },
 
   /* --- surprises ------------------------------------------------------------ */
   /* Every so often something lovely just crosses the sky — butterflies, a
      rocket, balloons. Purely a spectacle: nothing to learn, nothing to tap. */
   surprise: {
-    minPopsBetween: 35,
-    maxPopsBetween: 70,
+    minEatsBetween: 20,
+    maxEatsBetween: 45,
   },
 
   /* --- saving --------------------------------------------------------------- */
-  /* His zoo remembers him between sessions: total pops, level, trophies and
-     which animals he has met. "Start over" in the grown-ups menu wipes it. */
+  /* The world remembers him between sessions: things eaten, worlds finished,
+     and everything he has ever met. "Start over" in the grown-ups menu wipes
+     it. Old Bubble Zoo saves are migrated so his trophies survive the update. */
   save: {
-    key: 'bubble-zoo-save',
+    key: 'hungry-hole-save',
+    legacyKey: 'bubble-zoo-save',
     throttleSeconds: 3,    // at most one write this often (plus key moments)
   },
 
   /* --- sound -------------------------------------------------------------- */
   audio: {
     masterVolume: 0.55,    // deliberately conservative: this is held near his ears
-    speakChance: 0.2,      // fraction of pops where the voice names the animal
+    speakChance: 0.35,     // fraction of eats where the voice names the thing
     speechRate: 0.85,      // slower than default
     speechPitch: 1.3,      // friendlier than default
     speechVolume: 1.0,
@@ -111,7 +119,7 @@ export const CONFIG = {
   /* --- particles ---------------------------------------------------------- */
   particles: {
     max: 900,              // hard cap; oldest are recycled
-    popSparkles: 9,        // kept small: a pop should feel good, not look like a win
+    popSparkles: 9,        // kept small: a gulp should feel good, not look like a win
     confettiPerShower: 90,
     fireworkSparks: 46,
   },

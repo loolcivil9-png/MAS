@@ -1,7 +1,7 @@
 {
-  "name": "Bubble Zoo",
-  "short_name": "Bubble Zoo",
-  "description": "Pop bubbles, meet animals and dinosaurs, and win every single time. A gentle endless game for very young children.",
+  "name": "Hungry Hole",
+  "short_name": "Hungry Hole",
+  "description": "Drag the friendly hole, gobble up a whole cheerful little world, and win every single time. A gentle game for very young children.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",

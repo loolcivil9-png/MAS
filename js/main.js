@@ -1,22 +1,23 @@
 /* ---------------------------------------------------------------------------
-   Bubble Zoo — bootstrap and game loop.
+   Hungry Hole — bootstrap and game loop.
 
-   Owns the canvas, the logical coordinate space, the bubble population and the
-   glue between input, celebrations and the grown-ups menu.
+   Owns the canvas, the logical coordinate space, the hole, the world of
+   things it eats, and the glue between input, celebrations and the
+   grown-ups menu.
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
-import { Pool, Timers, clamp } from './util.js';
+import { Pool, Timers, clamp, rand, pick } from './util.js';
 import { Background } from './background.js';
-import { Bubble } from './bubble.js';
-import { FreedCreature } from './creaturePop.js';
+import { Hole } from './hole.js';
+import { Thing } from './thing.js';
 import { Particles } from './particles.js';
 import { Hud } from './hud.js';
 import { Celebrations } from './celebrate.js';
 import { audio } from './audio.js';
 import { attachInput, suppressBrowserGestures } from './input.js';
 import { Surprises } from './surprise.js';
-import { CREATURES } from './creatures.js';
+import { buildLevelList, TOTAL_KINDS } from './catalog.js';
 import { met, loadSave, initSave, flushSave, clearSave } from './save.js';
 
 /* --- elements --------------------------------------------------------------- */
@@ -58,29 +59,35 @@ const hud = new Hud();
 const timers = new Timers();
 const celebrations = new Celebrations({ particles, hud, timers, world, background });
 const surprises = new Surprises(particles);
+const hole = new Hole();
 
-const bubbles = new Pool(20, () => new Bubble());
-const freed = new Pool(28, () => new FreedCreature());
-
-/* --- the zoo remembers him --------------------------------------------------- */
-
-// Restore before anything spawns, so rare creatures he has already earned are
-// unlocked from the first bubble and the sky opens on the level he reached.
-const restored = loadSave();
-if (restored) {
-  hud.score = restored.totalPops;
-  hud.level = restored.level;
-  hud.trophies = restored.trophies;
-  background.resetTo(hud.level);
-}
-initSave(() => ({ totalPops: hud.score, level: hud.level, trophies: hud.trophies }));
+const things = new Pool(40, () => new Thing());
 
 let running = false;
 let started = false;
 let rafId = 0;
 let lastFrame = 0;
-let spawnTimer = 0;
 let wakeLock = null;
+
+let elapsed = 0;          // game-time seconds, drives the eat-streak timing
+let levelPending = false; // set between the last gulp and the next world
+let magnetT = 0;          // seconds of magnet superpower remaining
+let magnetEaten = 0;      // eats since the magnet switched on (voice cap)
+let lastEatAt = -Infinity;
+let streakStep = 0;
+
+/* --- the world remembers him ------------------------------------------------- */
+
+// Restore before anything spawns, so the sky (and its world) opens on the
+// level he reached. Old Bubble Zoo saves migrate: his trophies survive.
+const restored = loadSave();
+if (restored) {
+  hud.score = restored.totalEaten;
+  hud.level = restored.level;
+  hud.trophies = restored.trophies;
+  background.resetTo(hud.level);
+}
+initSave(() => ({ totalEaten: hud.score, level: hud.level, trophies: hud.trophies }));
 
 /* --- sizing ----------------------------------------------------------------- */
 
@@ -117,10 +124,8 @@ function resize() {
     l: (parseFloat(cs.paddingLeft) || 0) * k,
   };
 
-  // Nudge any bubble that the new width left hanging off the edge.
-  for (const b of bubbles.items) {
-    if (b.active) b.homeX = clamp(b.homeX, b.r * 0.62, Math.max(b.r * 0.62, world.w - b.r * 0.62));
-  }
+  // Nudge anything that the new width left hanging off the edge.
+  for (const th of things.items) if (th.active && th.state === 'idle') th.clampInto(world);
 }
 
 /**
@@ -157,244 +162,229 @@ const toWorld = (clientX, clientY) => ({
   y: ((clientY - viewport.top) / viewport.height) * world.h,
 });
 
-function onPoint(x, y, kind) {
+// Fingers currently on the screen, in press order. The hole obeys the newest;
+// when it lifts, an older finger that is still down takes over. A palm-slam is
+// just a lot of downs — nothing bad can happen.
+const pointers = [];
+
+function onPoint(x, y, kind, pointerId) {
   if (!running) return;
 
-  let hitAny = false;
-  for (const b of bubbles.items) {
-    if (!b.active || !b.contains(x, y)) continue;
-    b.active = false;          // before anything else, so one touch pops it once
-    popBubble(b);
-    hitAny = true;
-  }
-
-  // Touching empty screen still gets an answer. Nothing he does is ever ignored.
-  if (!hitAny && kind === 'down') {
+  if (kind === 'down') {
+    const i = pointers.indexOf(pointerId);
+    if (i !== -1) pointers.splice(i, 1);
+    pointers.push(pointerId);
+    hole.setTarget(x, y);
+    // Every touch is answered: the hole turns to come, and the spot sparkles.
     celebrations.onMiss(x, y);
-  } else if (hitAny && visibleBubbles() === 0) {
-    // He cleared the whole screen in one smear. Refill right here rather than
-    // waiting for the next update, so not even a single frame gets drawn empty.
-    spawnBubble('low');
-    spawnTimer = 0.1;
+  } else if (kind === 'move') {
+    if (pointers[pointers.length - 1] === pointerId) hole.setTarget(x, y);
+  } else { // 'up'
+    const i = pointers.indexOf(pointerId);
+    if (i !== -1) pointers.splice(i, 1);
+    if (pointers.length === 0) hole.release();
+    // Otherwise the hole keeps heading for its last target until the finger
+    // that now owns it moves — which reads as exactly what it is.
   }
-}
-
-function popBubble(b, muteCall = false) {
-  celebrations.onPop(b, muteCall);
-  const creature = freed.acquire();
-  creature.spawn(b.x, b.y, b.creature, b.r * 1.12);
-  if (b.special === 'rainbow') rainbowBurst(b);
-  surprises.onPop(!!hud.banner);
-}
-
-/**
- * The rainbow bubble's prize: every other bubble on screen pops itself, rippling
- * outward from where he touched. Each chained pop goes through the normal path,
- * so each one scores, flings its creature and plays its sound — and any bubble
- * he pops himself mid-chain simply beats the ripple to it.
- */
-function rainbowBurst(src) {
-  hud.showFlash(0.9, { rainbow: true });
-  audio.chime(7);
-
-  const others = [];
-  for (const b of bubbles.items) if (b.active) others.push(b);
-  others.sort(
-    (a, b) => Math.hypot(a.x - src.x, a.y - src.y) - Math.hypot(b.x - src.x, b.y - src.y),
-  );
-  others.forEach((b, i) => {
-    timers.after(0.1 * (i + 1), () => {
-      if (!b.active) return;
-      b.active = false;
-      // Half a dozen animal calls in one second would be a wall of noise;
-      // after the first two, the chain keeps just the pops.
-      popBubble(b, i >= 2);
-    });
-  });
 }
 
 attachInput(canvas, toWorld, onPoint);
 suppressBrowserGestures(document);
 
-/* --- bubble population ------------------------------------------------------ */
+/* --- building a world -------------------------------------------------------- */
 
-function liveBubbles() {
+function activeThings() {
   let n = 0;
-  for (const b of bubbles.items) if (b.active) n++;
+  for (const th of things.items) if (th.active) n++;
   return n;
 }
 
-/** Bubbles at least partly in view right now — not the ones still climbing up. */
-function visibleBubbles() {
-  let n = 0;
-  for (const b of bubbles.items) {
-    if (b.active && b.y - b.r < world.h && b.y + b.r > 0) n++;
-  }
-  return n;
-}
-
-function isDuplicate(bubble) {
-  for (const o of bubbles.items) {
-    if (o !== bubble && o.active && o.creature === bubble.creature) return true;
-  }
-  return false;
-}
-
 /**
- * Smallest edge-to-edge gap between this bubble and any other live one.
- * Negative means they overlap; Infinity means it has the sky to itself.
- */
-function smallestGap(bubble) {
-  let min = Infinity;
-  for (const o of bubbles.items) {
-    if (o === bubble || !o.active) continue;
-    const gap = Math.hypot(o.x - bubble.x, o.y - bubble.y) - (o.r + bubble.r);
-    if (gap < min) min = gap;
-  }
-  return min;
-}
-
-/** Is a rainbow bubble already live? Only one is allowed at a time. */
-function rainbowOnScreen() {
-  for (const b of bubbles.items) {
-    if (b.active && b.special === 'rainbow') return true;
-  }
-  return false;
-}
-
-function spawnBubble(place = 'below') {
-  const b = bubbles.acquire();
-
-  const opts = {
-    place,
-    theme: background.theme,
-    allowRainbow: hud.score >= CONFIG.bubble.rainbowUnlockPops && !rainbowOnScreen(),
-  };
-
-  // Re-roll a few times to avoid two of the same animal on screen at once.
-  // Early on only a dozen creatures have unlocked, so collisions are common and
-  // a screen with two identical dogs on it looks like a bug.
-  for (let attempt = 0; attempt < 8; attempt++) {
-    b.spawn(world, hud.score, opts);
-    if (!isDuplicate(b)) break;
-  }
-
-  // Then throw darts and keep the roomiest spot. Purely random placement is
-  // what made them pile on top of each other — in a space this narrow, clumping
-  // is the *likely* outcome of uniform random, not the unlucky one.
-  let bestX = b.x;
-  let bestY = b.y;
-  let bestGap = -Infinity;
-  for (let i = 0; i < CONFIG.bubble.placementTries; i++) {
-    b.place(world, place);
-    const gap = smallestGap(b);
-    if (gap > bestGap) { bestGap = gap; bestX = b.x; bestY = b.y; }
-    if (gap === Infinity) break; // nothing to avoid
-  }
-  b.homeX = bestX;
-  b.x = bestX;
-  b.y = bestY;
-
-  return b;
-}
-
-/** Opens with a full screen of well-spaced bubbles rather than an empty sky. */
-function fillScreen() {
-  for (let i = 0; i < CONFIG.bubble.maxOnScreen; i++) spawnBubble('anywhere');
-}
-
-function manageBubbles(dt) {
-  const B = CONFIG.bubble;
-
-  spawnTimer -= dt;
-
-  const visible = visibleBubbles();
-  const live = liveBubbles();
-
-  // An empty screen ignores the spawn timer entirely — it is the one state the
-  // game must never sit in, even for a fraction of a second.
-  if (visible === 0 && live < B.maxOnScreen + 2) {
-    spawnBubble('low');
-    spawnTimer = 0.1;
-    return;
-  }
-
-  if (spawnTimer > 0) return;
-
-  // Hard floor: the screen must never be empty. A bubble spawned below the
-  // edge takes several seconds to climb into reach, so after he clears the
-  // screen with one big smear, waiting for the normal pipeline would leave him
-  // staring at nothing. Put these straight into the lower part of the screen
-  // instead, where they read as having just risen in.
-  if (visible < B.minVisible && live < B.maxOnScreen + 2) {
-    spawnBubble('low');
-    spawnTimer = 0.12;
-    return;
-  }
-
-  if (live < B.maxOnScreen) {
-    spawnBubble('below');
-    spawnTimer = live < B.minOnScreen ? B.spawnInterval * 0.35 : B.spawnInterval;
-  }
-}
-
-/**
- * Nudges overlapping bubbles apart, sideways only.
+ * Lays out a fresh world: `counts` things per tier, biggest placed first into
+ * the roomiest spots (dart-throwing, keep the candidate furthest from the
+ * already-placed), one golden growth-spurt thing, and from level 2 a magnet.
  *
- * Spawning them in roomy spots is not enough on its own — they rise at very
- * different speeds and sway independently, so any well-spaced screenful slowly
- * converges into a pile. This keeps them readable as separate targets. Only
- * `homeX` is touched, so their rise speeds stay exactly as designed.
- *
- * Tuned by `separationMargin` and `separationSpeed` in config.js.
+ * Growth is then NORMALIZED: the shares of all non-landmark things sum to
+ * exactly the growth needed for the landmark to fit (times a small margin).
+ * However the level is tuned and whatever order he eats in, eating everything
+ * else always opens the mouth wide enough for the centrepiece. Progression is
+ * an invariant, not a hope.
  */
-function separateBubbles(dt) {
-  const B = CONFIG.bubble;
-  const items = bubbles.items;
+function buildLevel(level) {
+  const T = CONFIG.things;
+  things.releaseAll();
 
-  for (let i = 0; i < items.length; i++) {
-    const a = items[i];
-    if (!a.active) continue;
+  const list = buildLevelList(background.theme, T.counts);
+  list.sort((a, b) => b.tier - a.tier);
 
-    for (let j = i + 1; j < items.length; j++) {
-      const b = items[j];
-      if (!b.active) continue;
+  // Wherever the hole currently sits counts as occupied — generously, since
+  // its drawn radius may still be spring-shrinking — so a fresh world never
+  // opens with something already half-way down the hatch.
+  const placed = [{
+    x: hole.x,
+    y: hole.y,
+    size: Math.max(hole.rShown, CONFIG.hole.baseRadius) + CONFIG.things.tierSizes[0],
+  }];
+  for (const { entry, tier } of list) {
+    const size = T.tierSizes[tier];
+    const m = size * 0.6;
+    const loX = world.safe.l + m;
+    const hiX = Math.max(loX, world.w - world.safe.r - m);
+    const loY = world.safe.t + T.hudBand + m;
+    const hiY = Math.max(loY, world.h - world.safe.b - m);
 
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const dist = Math.hypot(dx, dy) || 0.001;
-      const want = (a.r + b.r) * B.separationMargin;
-      const overlap = want - dist;
-      if (overlap <= 0) continue;
+    let bestX = world.w / 2;
+    let bestY = world.h / 2;
+    let bestGap = -Infinity;
+    for (let i = 0; i < T.placementTries; i++) {
+      const x = rand(loX, hiX);
+      const y = rand(loY, hiY);
+      let gap = Infinity;
+      for (const p of placed) {
+        gap = Math.min(gap, Math.hypot(p.x - x, p.y - y) - (p.size + size));
+      }
+      if (gap > bestGap) { bestGap = gap; bestX = x; bestY = y; }
+      if (gap === Infinity) break; // nothing to avoid yet
+    }
 
-      // Proportional to how badly they crowd each other, so it eases off
-      // rather than snapping them apart.
-      const push = (overlap / want) * B.separationSpeed * dt;
-      const dir = dx !== 0 ? Math.sign(dx) : 1;
-      a.homeX -= dir * push;
-      b.homeX += dir * push;
+    const th = things.acquire();
+    th.spawn(entry, tier, size, bestX, bestY);
+    placed.push(th);
+  }
+
+  const spawned = placed.slice(1); // drop the hole's placeholder
+
+  const smalls = spawned.filter((t) => t.tier <= 1);
+  if (smalls.length) pick(smalls).golden = true;
+  if (level >= CONFIG.special.magnetFromLevel) {
+    const candidates = spawned.filter((t) => t.tier <= 2 && !t.golden);
+    if (candidates.length) pick(candidates).magnet = true;
+  }
+
+  const landmarkSize = T.tierSizes[T.tierSizes.length - 1];
+  const rNeeded = (landmarkSize / CONFIG.hole.mouthRatio) * T.landmarkFitMargin;
+  const totalGrowth = Math.max(0, rNeeded - CONFIG.hole.baseRadius);
+  const eaters = spawned.filter((t) => t.tier < T.tierSizes.length - 1);
+  const weight = (t) => t.size * (t.golden ? CONFIG.special.goldenGrowthMult : 1);
+  const weightSum = eaters.reduce((s, t) => s + weight(t), 0) || 1;
+  for (const t of eaters) t.growth = totalGrowth * (weight(t) / weightSum);
+
+  celebrations.beginLevel(spawned.length);
+}
+
+/* --- eating ------------------------------------------------------------------ */
+
+const LANDMARK_TIER = CONFIG.things.tierSizes.length - 1;
+
+function eatCheck() {
+  const T = CONFIG.things;
+
+  for (const th of things.items) {
+    if (!th.active || th.state !== 'idle') continue;
+
+    const dx = th.x - hole.x;
+    const dy = th.y - hole.y;
+    const reach = hole.rShown * T.overlapFactor + th.size * T.thingHit;
+    if (dx * dx + dy * dy > reach * reach) continue;
+
+    if (th.size <= hole.mouth) {
+      th.startSwallow(hole);
+      hole.gulp();
+      audio.gulp(th.size / T.tierSizes[LANDMARK_TIER]);
+
+      // Quick successive gulps climb a little pentatonic run.
+      if (elapsed - lastEatAt <= CONFIG.streak.window) {
+        streakStep = Math.min(streakStep + 1, CONFIG.streak.maxStep);
+        audio.munch(streakStep);
+      } else {
+        streakStep = 0;
+      }
+      lastEatAt = elapsed;
+    } else if (th.boinkCooldown <= 0) {
+      // Too big — for now. A friendly boing and a hint of sparkle; never
+      // a penalty. He will be back for this one.
+      th.wobble();
+      audio.boing();
+      particles.sparkleBurst(th.x, th.y - th.size * 0.6, rand(0, 360), 4);
     }
   }
+}
 
-  for (const b of items) {
-    if (!b.active) continue;
-    const edge = b.r * 0.62;
-    b.homeX = clamp(b.homeX, edge, Math.max(edge, world.w - edge));
+/** A swallow just finished: score it, grow, and check for special powers. */
+function onEaten(th) {
+  hole.grow(th.growth);
+
+  const muteVoice = magnetT > 0 && ++magnetEaten > 2;
+  celebrations.onEat(th, muteVoice);
+  surprises.onEat(!!hud.banner);
+
+  if (th.magnet) startMagnet();
+  if (th.tier === LANDMARK_TIER) timers.after(0.6, () => audio.burp());
+}
+
+/**
+ * The magnet superpower: for a few seconds, everything nearby that already
+ * fits slides toward the hole on its own. Each arrival still goes through the
+ * normal swallow path, so everything still plops, scores and grows.
+ */
+function startMagnet() {
+  magnetT = CONFIG.special.magnetSeconds;
+  magnetEaten = 0;
+  hud.showFlash(0.8, { rainbow: true });
+  audio.chime(7);
+}
+
+function magnetPull(dt) {
+  const S = CONFIG.special;
+  for (const th of things.items) {
+    if (!th.active || th.state !== 'idle' || th.size > hole.mouth) continue;
+    const dx = hole.x - th.x;
+    const dy = hole.y - th.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    if (dist > S.magnetRadius) continue;
+
+    const speed = Math.min(620, 140 + dist * 2.2);
+    th.x += (dx / dist) * speed * dt;
+    th.y += (dy / dist) * speed * dt;
+    if (Math.random() < dt * 7) particles.sparkleBurst(th.x, th.y, 200, 1);
   }
+}
+
+/** Clean plate: the last thing has gone down. Shortly after, a fresh world. */
+function checkCleanPlate() {
+  if (levelPending || !started || activeThings() > 0) return;
+  levelPending = true;
+  // The level-up spectacle itself fires from celebrate.js when the fifth star
+  // lands; this just brings the next world in after the fireworks have peaked.
+  timers.after(2.8, () => {
+    hole.r = CONFIG.hole.baseRadius;   // the spring animates the shrink
+    buildLevel(hud.level);
+    levelPending = false;
+  });
 }
 
 /* --- loop ------------------------------------------------------------------- */
 
 function update(dt) {
+  elapsed += dt;
   timers.update(dt);
   background.update(dt);
   surprises.update(dt, world);
-  manageBubbles(dt);
+  hole.update(dt, world);
 
-  for (const b of bubbles.items) if (b.active) b.update(dt, world);
-  separateBubbles(dt);
-  for (const c of freed.items) if (c.active) c.update(dt, world);
+  if (magnetT > 0) {
+    magnetT -= dt;
+    magnetPull(dt);
+  }
 
+  eatCheck();
+
+  for (const th of things.items) {
+    if (!th.active) continue;
+    if (th.update(dt, world, hole) === 'eaten') onEaten(th);
+  }
+
+  checkCleanPlate();
   particles.update(dt, world);
   hud.update(dt, world);
 }
@@ -403,11 +393,12 @@ function render() {
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
   background.draw(ctx, world);
-  surprises.draw(ctx);   // behind the bubbles: lovely to watch, nothing to tap
+  surprises.draw(ctx);   // behind everything he interacts with
   hud.drawFlash(ctx, world);
 
-  for (const b of bubbles.items) if (b.active) b.draw(ctx);
-  for (const c of freed.items) if (c.active) c.draw(ctx);
+  hole.draw(ctx);
+  // Things draw over the hole, so a swallowed one visibly spirals down INTO it.
+  for (const th of things.items) if (th.active) th.draw(ctx);
 
   particles.draw(ctx);
   hud.draw(ctx, world);
@@ -448,7 +439,8 @@ function start() {
   splash.classList.add('is-hidden');
   resize();
 
-  fillScreen();
+  hole.reset(world);
+  buildLevel(hud.level);
   audio.chime(4);
   startLoop();
 }
@@ -499,8 +491,8 @@ function beginHold(e) {
 }
 
 function tickHold() {
-  const elapsed = (performance.now() - holdStart) / 1000;
-  const p = clamp(elapsed / CONFIG.gate.holdSeconds, 0, 1);
+  const elapsedHold = (performance.now() - holdStart) / 1000;
+  const p = clamp(elapsedHold / CONFIG.gate.holdSeconds, 0, 1);
   gate.style.setProperty('--p', (p * 100).toFixed(1));
 
   if (p >= 1) {
@@ -532,9 +524,9 @@ function openParentMenu() {
   pmVolume.value = String(Math.round(CONFIG.audio.masterVolume * 100));
   pmVoice.checked = CONFIG.audio.voiceEnabled;
   pmStat.textContent =
-    `Popped ${hud.score} bubble${hud.score === 1 ? '' : 's'}, won ` +
-    `${hud.trophies} time${hud.trophies === 1 ? '' : 's'}, and met ` +
-    `${met.size} of ${CREATURES.length} animals.`;
+    `Ate ${hud.score} thing${hud.score === 1 ? '' : 's'}, finished ` +
+    `${hud.trophies} world${hud.trophies === 1 ? '' : 's'}, and met ` +
+    `${met.size} of ${TOTAL_KINDS} different things.`;
   parentMenu.hidden = false;
 }
 
@@ -558,10 +550,13 @@ pmRestart.addEventListener('click', () => {
   celebrations.reset();   // also snaps the sky back to level 1
   particles.clear();
   timers.clear();
-  bubbles.releaseAll();
-  freed.releaseAll();
-  spawnTimer = 0;
-  fillScreen();
+  things.releaseAll();
+  hole.reset(world);
+  levelPending = false;
+  magnetT = 0;
+  streakStep = 0;
+  lastEatAt = -Infinity;
+  buildLevel(1);
   closeParentMenu();
 });
 
@@ -572,6 +567,25 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }
+
+/* --- test hook --------------------------------------------------------------- */
+
+// Read-only getters for the automated smoke test. No gameplay effect.
+window.__hh = {
+  get eaten() { return hud.score; },
+  get remaining() { return activeThings(); },
+  get holeR() { return hole.r; },
+  get level() { return hud.level; },
+  get hole() { return { x: hole.x, y: hole.y, tx: hole.tx, ty: hole.ty, following: hole.following }; },
+  get things() {
+    const out = [];
+    for (const th of things.items) {
+      if (th.active) out.push({ x: Math.round(th.x), y: Math.round(th.y), size: th.size, tier: th.tier, state: th.state });
+    }
+    return out;
+  },
+  get world() { return { w: world.w, h: world.h, mouth: hole.mouth }; },
+};
 
 /* --- go --------------------------------------------------------------------- */
 

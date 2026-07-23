@@ -131,9 +131,13 @@ function renderIcon(size, { maskable }) {
   const artSize = size - pad * 2;
   const cornerRadius = maskable ? 0 : size * 0.225;
 
-  const bubbleR = artSize * 0.315;
-  const bcx = size * 0.5;
-  const bcy = size * 0.5;
+  // The hole: an ellipse sitting on the grass, eyes peeking over its rim.
+  const hcx = size * 0.5;
+  const hcy = size * 0.60;
+  const hrx = artSize * 0.315;
+  const hry = hrx * 0.62;
+  const eyeR = hrx * 0.20;
+  const eyeY = hcy - hry * 1.28;
 
   const put = (i, r, g, b, a) => {
     // Source-over compositing onto whatever is already in the buffer.
@@ -152,70 +156,95 @@ function renderIcon(size, { maskable }) {
       const fx = x + 0.5;
       const fy = y + 0.5;
 
-      // --- background plate ---------------------------------------------------
+      // --- background plate: sky over a gently rolling meadow -----------------
       const cover = maskable
         ? 1
         : smoothstep(1, -1, roundedSquareSdf(fx, fy, size, cornerRadius));
       if (cover <= 0.001) continue;
 
-      const t = fy / size;
-      let br = lerp(0x74, 0x18, t);
-      let bg = lerp(0x46, 0x0e, t);
-      let bb = lerp(0xe8, 0x40, t);
-
-      // Warm glow behind the bubble so it does not sit on flat colour.
-      const glow = Math.exp(-(((fx - bcx) ** 2 + (fy - bcy * 0.86) ** 2) / (2 * (size * 0.34) ** 2)));
-      br = lerp(br, 0xff, glow * 0.16);
-      bg = lerp(bg, 0xd9, glow * 0.16);
-      bb = lerp(bb, 0xa8, glow * 0.10);
-
+      const groundLine = size * 0.46 + Math.sin((fx / size) * Math.PI * 1.6 + 0.4) * size * 0.025;
+      let br;
+      let bg;
+      let bb;
+      if (fy < groundLine) {
+        const u = clamp01(fy / groundLine);
+        br = lerp(0x58, 0xb9, u);
+        bg = lerp(0xb4, 0xe9, u);
+        bb = lerp(0xf2, 0xff, u);
+      } else {
+        const v = clamp01((fy - groundLine) / (size - groundLine));
+        br = lerp(0x63, 0x2f, v);
+        bg = lerp(0xc9, 0x8f, v);
+        bb = lerp(0x58, 0x3c, v);
+      }
       put(i, br, bg, bb, cover);
 
-      // --- sparkles behind the bubble ----------------------------------------
+      // --- sparkles in the sky -------------------------------------------------
       const sparkles = [
-        [size * 0.235, size * 0.255, size * 0.070],
-        [size * 0.795, size * 0.315, size * 0.048],
-        [size * 0.760, size * 0.760, size * 0.058],
+        [size * 0.215, size * 0.205, size * 0.062],
+        [size * 0.800, size * 0.255, size * 0.046],
       ];
       for (const [sx, sy, sr] of sparkles) {
         const a = sparkle(fx, fy, sx, sy, sr) * cover * 0.92;
         if (a > 0.002) put(i, 255, 249, 214, a);
       }
 
-      // --- the bubble ---------------------------------------------------------
-      const dx = fx - bcx;
-      const dy = fy - bcy;
-      const d = Math.hypot(dx, dy);
+      // --- the hole ------------------------------------------------------------
+      const ex = (fx - hcx) / hrx;
+      const ey = (fy - hcy) / hry;
+      const ed = Math.hypot(ex, ey); // 1 exactly on the ellipse edge
 
-      if (d < bubbleR * 1.02) {
-        const inside = smoothstep(bubbleR + 1, bubbleR - 1, d) * cover;
-        const nt = clamp01(d / bubbleR);
-        const ang = Math.atan2(dy, dx);
+      if (ed < 1.6) {
+        const ang = Math.atan2(ey, ex);
+        const hue = (ang / Math.PI) * 180 + 230; // the rainbow rim
 
-        // Iridescence: hue sweeps around the rim and outward from the centre.
-        const hue = 186 + Math.cos(ang - 0.85) * 78 + nt * 66;
-        const [r, g, b] = hslToRgb(hue, 0.92, lerp(0.86, 0.60, nt));
-        // Glass is see-through in the middle and dense at the edge.
-        const alpha = inside * (0.20 + 0.62 * nt ** 3);
-        put(i, r, g, b, alpha);
+        // The outer glow, so the rim reads as light rather than paint.
+        if (ed > 1) {
+          const glow = Math.exp(-(((ed - 1) / 0.17) ** 2)) * 0.4;
+          const [gr, gg, gb] = hslToRgb(hue, 0.95, 0.7);
+          if (glow > 0.004) put(i, gr, gg, gb, glow * cover);
+        }
 
-        // Bright rim.
-        const rim = Math.exp(-(((d - bubbleR * 0.945) / (bubbleR * 0.055)) ** 2));
+        // The dark itself: near-black centre, deep violet toward the edge.
+        const inside = smoothstep(1.015, 0.985, ed);
+        if (inside > 0) {
+          const t = clamp01(ed);
+          const dr = lerp(0x06, 0x22, t ** 1.6);
+          const dg = lerp(0x03, 0x14, t ** 1.6);
+          const db = lerp(0x12, 0x48, t ** 1.6);
+          put(i, dr, dg, db, inside * cover);
+
+          // A faint interior swirl ring, hinting at depth.
+          const swirl = Math.exp(-(((ed - 0.52) / 0.07) ** 2)) * 0.22;
+          if (swirl > 0.004) put(i, 0x6e, 0x58, 0xbe, swirl * inside * cover);
+        }
+
+        // The bright rim.
+        const rim = Math.exp(-(((ed - 1) / 0.045) ** 2));
         if (rim > 0.004) {
-          const [rr, rg, rb] = hslToRgb(hue + 172, 1, 0.90);
-          put(i, rr, rg, rb, rim * inside * 0.95);
+          const [rr, rg, rb] = hslToRgb(hue, 0.95, 0.72);
+          put(i, rr, rg, rb, rim * cover * 0.96);
         }
       }
 
-      // --- specular highlight, drawn last so it reads as glass ----------------
-      const hx = fx - (bcx - bubbleR * 0.36);
-      const hy = fy - (bcy - bubbleR * 0.40);
-      const ca = Math.cos(-0.62);
-      const sa = Math.sin(-0.62);
-      const ux = (hx * ca - hy * sa) / (bubbleR * 0.27);
-      const uy = (hx * sa + hy * ca) / (bubbleR * 0.165);
-      const hd = Math.hypot(ux, uy);
-      if (hd < 1.25) put(i, 255, 255, 255, smoothstep(1.05, 0.7, hd) * cover * 0.95);
+      // --- googly eyes peeking over the rim, drawn last ------------------------
+      for (const side of [-1, 1]) {
+        const dxE = fx - (hcx + side * hrx * 0.46);
+        const dyE = fy - eyeY;
+        const d = Math.hypot(dxE, dyE) / eyeR;
+        if (d > 1.35) continue;
+
+        put(i, 255, 255, 255, smoothstep(1.06, 0.96, d) * cover);
+
+        const outline = Math.exp(-(((d - 1) / 0.09) ** 2)) * 0.85;
+        if (outline > 0.004) put(i, 0x1e, 0x12, 0x46, outline * cover);
+
+        const pd = Math.hypot(dxE, dyE - eyeR * 0.28) / (eyeR * 0.46);
+        if (pd < 1.2) put(i, 0x22, 0x14, 0x48, smoothstep(1.08, 0.92, pd) * cover);
+
+        const gd = Math.hypot(dxE + eyeR * 0.14, dyE - eyeR * 0.12) / (eyeR * 0.14);
+        if (gd < 1.3) put(i, 255, 255, 255, smoothstep(1.1, 0.8, gd) * cover * 0.9);
+      }
     }
   }
 

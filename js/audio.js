@@ -5,8 +5,8 @@
    Two deliberate choices worth knowing about:
 
    * Everything melodic uses a major pentatonic scale. Pentatonic has no
-     dissonant interval in it, so when he mashes ten bubbles at once the result
-     is a chord rather than a mess. It is impossible for this to sound wrong.
+     dissonant interval in it, so when a magnet feast lands ten gulps at once
+     the result is a chord rather than a mess. It cannot sound wrong.
 
    * The whole mix runs through a compressor with a conservative master gain.
      This is a phone held roughly six inches from a three-year-old's ears; ten
@@ -142,20 +142,112 @@ class AudioEngine {
   /* --- the sounds --------------------------------------------------------- */
 
   /**
-   * The bubble pop. A fast upward pitch sweep with a click on the front — the
-   * shape of a water droplet, which is what reads as "pop" to an ear.
-   * Pitch scales inversely with size, so big bubbles go *bloop* and small ones
-   * go *blip*. That alone makes popping a wall of bubbles sound musical.
+   * The gulp — the signature sound. A downward swallow-sweep with a soft
+   * thunk under it and a tiny satisfied blip on the end. Pitch scales
+   * inversely with size, so a strawberry goes *glp* and a house goes *GLOMP*.
+   * That alone makes clearing a whole world sound musical.
+   * @param {number} sizeNorm 0 (tiny) .. 1 (the landmark)
    */
-  pop(radius) {
+  gulp(sizeNorm = 0) {
     if (!this.ready) return;
-    const B = CONFIG.bubble;
-    const norm = clamp((radius - B.minRadius) / Math.max(1, B.maxRadius - B.minRadius), 0, 1);
-    const f0 = lerp(780, 370, norm);
+    const norm = clamp(sizeNorm, 0, 1);
+    const f0 = lerp(700, 260, norm);
     const t = this.t;
 
-    this.#tone(t, 0.12, { type: 'sine', freq: f0 * 0.45, sweepTo: f0 * 1.8, gain: 0.5, attack: 0.005 });
-    this.#noise(t, 0.035, { freq: f0 * 2.4, q: 1.1, gain: 0.14 });
+    this.#tone(t, 0.16, { type: 'sine', freq: f0, sweepTo: f0 * 0.45, gain: 0.45, attack: 0.006 });
+    this.#noise(t, 0.06, { freq: f0 * 0.9, q: 1.2, gain: 0.16 });
+    // The little "down the hatch!" blip after the swallow lands.
+    this.#tone(t + 0.14, 0.08, { type: 'sine', freq: f0 * 1.3, sweepTo: f0 * 1.9, gain: 0.12, attack: 0.005 });
+  }
+
+  /** One step of the eat-streak melody. Climbs the pentatonic run and holds. */
+  munch(step = 0) {
+    if (!this.ready) return;
+    const n = PENTATONIC[clamp(step, 0, PENTATONIC.length - 1)] + 12;
+    this.#tone(this.t, 0.18, { type: 'triangle', freq: semi(C5, n), gain: 0.18, attack: 0.005 });
+  }
+
+  /** The friendly "too big!" wobble — a springy rubber-band boing. */
+  boing() {
+    if (!this.ready) return;
+    const { ctx, master } = this;
+    const t = this.t;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(240, t);
+    osc.frequency.exponentialRampToValueAtTime(150, t + 0.3);
+
+    // A fast pitch wobble that slows down is what reads as a spring settling.
+    const lfo = ctx.createOscillator();
+    lfo.frequency.setValueAtTime(16, t);
+    lfo.frequency.exponentialRampToValueAtTime(5, t + 0.3);
+    const depth = ctx.createGain();
+    depth.gain.setValueAtTime(60, t);
+    depth.gain.exponentialRampToValueAtTime(8, t + 0.3);
+    lfo.connect(depth); depth.connect(osc.frequency);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+
+    osc.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + 0.37);
+    lfo.start(t); lfo.stop(t + 0.37);
+  }
+
+  /** The comedy beat after the landmark goes down. Deliberately a bit rude. */
+  burp() {
+    if (!this.ready) return;
+    const { ctx, master } = this;
+    const t = this.t;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(130, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.35);
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.Q.value = 3;
+    lp.frequency.setValueAtTime(500, t);
+    lp.frequency.exponentialRampToValueAtTime(220, t + 0.35);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.26, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+
+    // The gurgle: a rough tremolo on the volume.
+    const trem = ctx.createOscillator();
+    trem.frequency.value = 11;
+    const tremDepth = ctx.createGain();
+    tremDepth.gain.value = 0.11;
+    trem.connect(tremDepth); tremDepth.connect(g.gain);
+
+    osc.connect(lp); lp.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + 0.45);
+    trem.start(t); trem.stop(t + 0.45);
+  }
+
+  /** Cars and buses. An engine revving up and settling. */
+  vroom() {
+    if (!this.ready) return;
+    const t = this.t;
+    this.#voiced(t, 0.5, {
+      type: 'sawtooth', from: 90, to: 280, filterFrom: 300, filterTo: 900, q: 2, gain: 0.2, attack: 0.04,
+    });
+    this.#voiced(t + 0.32, 0.22, {
+      type: 'sawtooth', from: 240, to: 140, filterFrom: 800, filterTo: 350, q: 2, gain: 0.14, attack: 0.02,
+    });
+  }
+
+  /** Trees and crunchy things disappearing. */
+  crunch() {
+    if (!this.ready) return;
+    const t = this.t;
+    this.#noise(t, 0.09, { type: 'highpass', freq: 1800, q: 0.7, gain: 0.2 });
+    this.#noise(t + 0.11, 0.08, { type: 'highpass', freq: 1400, q: 0.7, gain: 0.16 });
   }
 
   /** Tiny high glitter — layered under the pop and under confetti. */
@@ -329,7 +421,7 @@ class AudioEngine {
   }
 
   /**
-   * Plays a creature's synthesized call. Returns false when there is no recipe
+   * Plays a thing's synthesized voice. Returns false when there is no recipe
    * for that name (or audio is not unlocked yet), so the caller can fall back
    * to the speaking voice instead.
    */
@@ -357,6 +449,10 @@ class AudioEngine {
       case 'splash': this.#splash(); return true;
       case 'dolphin': this.#dolphin(); return true;
       case 'magic': this.#magic(); return true;
+      case 'vroom': this.vroom(); return true;
+      case 'crunch': this.crunch(); return true;
+      case 'boing': this.boing(); return true;
+      case 'whoosh': this.whoosh(0.5); return true;
       default: return false;
     }
   }
