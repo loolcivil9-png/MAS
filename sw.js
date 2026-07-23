@@ -1,14 +1,26 @@
 /* ---------------------------------------------------------------------------
    Offline support.
 
-   Strategy is stale-while-revalidate: the cached copy is served immediately
-   (so the game opens instantly, and works with no signal at all), while a fresh
-   copy is fetched in the background for next time. That means edits reach the
-   phone after one reload without anyone having to remember to bump a version
-   number, and a dead connection never blocks play.
+   Strategy is network-first with a short leash, falling back to the cache.
+
+   It used to be stale-while-revalidate, which served the cached copy instantly
+   and refreshed in the background. That is faster, but it meant a freshly
+   deployed version only appeared on the *second* open — so the version marker
+   on the home screen would confidently report the wrong build. Since the whole
+   point of that marker is knowing what is live, correctness wins over the few
+   hundred milliseconds.
+
+   Offline is unaffected: with no connection the fetch fails immediately and the
+   cache answers, so the game still opens and plays with no signal at all.
    --------------------------------------------------------------------------- */
 
-const CACHE = 'bubble-zoo-v1';
+// Keep in step with CONFIG.version in js/config.js. Changing it makes the new
+// service worker install, drop the old cache, and take over — which is what
+// makes a freshly deployed version actually show up on the phone.
+const CACHE = 'bubble-zoo-1.2.0';
+
+// How long to wait for the network before falling back to the cached copy.
+const NETWORK_TIMEOUT = 2500;
 
 const PRECACHE = [
   './',
@@ -58,24 +70,22 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    const cached = await cache.match(req, { ignoreSearch: true });
 
-    const network = fetch(req)
-      .then((res) => {
-        if (res && res.ok && res.type === 'basic') cache.put(req, res.clone());
-        return res;
-      })
-      .catch(() => null);
-
-    if (cached) {
-      event.waitUntil(network); // refresh for next time, do not block this load
-      return cached;
+    try {
+      const fresh = await withTimeout(fetch(req), NETWORK_TIMEOUT);
+      if (fresh && fresh.ok && fresh.type === 'basic') {
+        cache.put(req, fresh.clone());   // keep the offline copy current
+        return fresh;
+      }
+      if (fresh) return fresh;           // a real 404 should look like a 404
+    } catch {
+      // Offline, or the network is too slow to wait for. Use what we have.
     }
 
-    const fresh = await network;
-    if (fresh) return fresh;
+    const cached = await cache.match(req, { ignoreSearch: true });
+    if (cached) return cached;
 
-    // Offline and never cached: any navigation still lands on the game.
+    // Never cached and no network: any navigation still lands on the game.
     if (req.mode === 'navigate') {
       const fallback = await cache.match('./index.html');
       if (fallback) return fallback;
@@ -83,3 +93,11 @@ self.addEventListener('fetch', (event) => {
     return Response.error();
   })());
 });
+
+/** Rejects rather than hanging, so a bad connection cannot stall the launch. */
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('network timeout')), ms)),
+  ]);
+}

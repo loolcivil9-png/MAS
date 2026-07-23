@@ -179,6 +179,21 @@ body { height: 100dvh; }
   opacity: .82;
 }
 
+/* Build marker. Deliberately tiny and dim — it is for you, not for him. */
+.splash-version {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--safe-b) + .7rem);
+  margin: 0;
+  text-align: center;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .16em;
+  color: #fff;
+  opacity: .32;
+}
+
 /* ----------------------------------------------------------- parent gate --- */
 
 /* Deliberately small, dim and tucked into the corner. The only way out of the

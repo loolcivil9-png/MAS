@@ -5,6 +5,11 @@
    --------------------------------------------------------------------------- */
 
 export const CONFIG = {
+  /* Shown small at the bottom of the home screen, so you can tell at a glance
+     which build is actually live after a deploy.
+     BUMP THIS on every change, and bump CACHE in sw.js to match. */
+  version: '1.2.0',
+
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Bubble Zoo". */
   title: 'Bubble Zoo',
@@ -22,16 +27,24 @@ export const CONFIG = {
 
   /* --- bubbles ------------------------------------------------------------ */
   bubble: {
-    minRadius: 74,         // logical units. ~120 px across on a normal phone
-    maxRadius: 128,        // ~210 px across
-    minSpeed: 40,          // upward, logical units per second
-    maxSpeed: 74,
-    swayAmount: 26,        // how far it drifts side to side
-    swaySpeedMin: 0.25,    // sway cycles per second
-    swaySpeedMax: 0.55,
+    // A wide spread on both size and speed, so no two bubbles feel alike.
+    minRadius: 58,         // logical units. ~94 px across on a normal phone
+    maxRadius: 130,        // ~211 px across. Portrait is only ~460 wide, so going
+                           // bigger than this forces bubbles to overlap
+    minSpeed: 26,          // upward, logical units per second
+    maxSpeed: 92,
+    speedJitter: 0.26,     // ± this much on top, so size does not perfectly predict speed
+    swayAmount: 30,        // how far it drifts side to side
+    swaySpeedMin: 0.18,    // sway cycles per second
+    swaySpeedMax: 0.70,
+
+    minVisible: 4,         // hard floor: never fewer than this actually in view
     minOnScreen: 5,        // population is topped up to sit between these
-    maxOnScreen: 7,
-    spawnInterval: 0.42,   // seconds between spawns while topping up
+    maxOnScreen: 6,        // (counts bubbles still climbing up from below)
+    spawnInterval: 0.34,   // seconds between spawns while topping up
+    placementTries: 18,    // candidate positions tested; the roomiest one wins
+    separationMargin: 1.12, // aim for a visible gap, not merely "not touching"
+    separationSpeed: 155,   // how firmly overlapping bubbles push each other apart
     hitScale: 1.35,        // touch radius vs. drawn radius. He does not need to be accurate
     goldenChance: 1 / 15,  // how often a golden bubble appears
     goldenWorth: 5,        // a golden bubble counts as this many bubbles toward the level

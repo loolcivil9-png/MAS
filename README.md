@@ -106,10 +106,26 @@ title: "Sami's Bubble Zoo",   // shown on the splash
 playerName: 'Sami',           // the voice congratulates him by name
 ```
 
+### Knowing what is deployed
+
+`CONFIG.version` is printed small and dim at the bottom of the home screen. Bump
+it on every change — **and bump `CACHE` in [`sw.js`](sw.js) to match** — so you
+can open the game on the phone and confirm at a glance that the new build
+actually landed.
+
+The service worker fetches from the network first (falling back to the cache
+after 2.5 seconds, or instantly when offline). That means a deploy shows up the
+first time he opens it, not the second — without which the version marker would
+cheerfully report the wrong number.
+
 Hearing his own name at the winning moment is the strongest reward in here.
 
-If it is too busy, lower `bubble.maxOnScreen`. If he is not landing his taps,
-raise `bubble.hitScale`. **If levels feel too long or too short, change
+If it is too busy, lower `bubble.maxOnScreen`; `bubble.minVisible` is the hard
+floor that stops the screen ever going empty. `bubble.separationMargin` and
+`separationSpeed` control how firmly bubbles push each other apart, and
+`placementTries` is how many spots a new bubble considers before picking the
+roomiest. If he is not landing his taps, raise `bubble.hitScale`.
+**If levels feel too long or too short, change
 `celebrate.bubblesPerLevel`** — that is the main dial. `celebrate.starsPerLevel`
 sets how many stars fill along the way, and `bubble.goldenWorth` is how many
 bubbles a golden one is worth.

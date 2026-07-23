@@ -7,10 +7,11 @@
    --------------------------------------------------------------------------- */
 
 import { CONFIG, emojiFont } from './config.js';
-import { TAU, rand, chance, clamp, hsla } from './util.js';
+import { TAU, rand, chance, clamp, easeOutCubic, hsla } from './util.js';
 import { pickCreature } from './creatures.js';
 
 const GOLD_HUE = 44;
+const INTRO_TIME = 0.4; // seconds for an on-screen bubble to swell into view
 
 export class Bubble {
   constructor() {
@@ -18,31 +19,27 @@ export class Bubble {
   }
 
   /**
-   * @param {{spread?: boolean}} [opts] `spread` places the bubble somewhere on
-   *   screen rather than below it. Used only for the very first population —
-   *   otherwise the game opens on an empty sky and he waits several seconds for
-   *   the first bubble to climb into reach, which is the worst possible moment
-   *   to ask a three-year-old for patience.
+   * @param {{place?: 'below' | 'anywhere' | 'low'}} [opts]
+   *   `below`    climbs into view from off the bottom edge (the normal case)
+   *   `anywhere` already on screen — used for the opening screenful, so the
+   *              game never starts on an empty sky
+   *   `low`      already on screen but near the bottom, as though it had just
+   *              risen in. Used to refill in a hurry when he clears the screen.
    */
-  spawn(world, score, { spread = false } = {}) {
+  spawn(world, score, { place = 'below' } = {}) {
     const B = CONFIG.bubble;
 
     this.active = true;
     this.r = rand(B.minRadius, B.maxRadius);
 
-    // Allowed to hang slightly off the edge. Portrait is only ~460 units wide,
-    // and keeping every bubble fully inside means the big ones can only ever sit
-    // in the middle third — which reads as a clump down the centre of the screen.
-    this.homeX = rand(this.r * 0.62, world.w - this.r * 0.62);
-    this.x = this.homeX;
-    this.y = spread
-      ? rand(world.h * 0.18, world.h - this.r * 0.6)
-      // Staggered start depths so a top-up burst does not arrive as a straight line.
-      : world.h + this.r + rand(20, 320);
-
-    // Bigger bubbles are slower. Easier targets stay on screen longer.
+    // Bigger bubbles drift up more slowly, so the easiest targets are also the
+    // ones that linger longest. The jitter stops size from being a perfect
+    // predictor of speed, which is what made them all feel the same.
     const sizeT = (this.r - B.minRadius) / Math.max(1, B.maxRadius - B.minRadius);
-    this.vy = -(B.maxSpeed - (B.maxSpeed - B.minSpeed) * sizeT);
+    const base = B.maxSpeed - (B.maxSpeed - B.minSpeed) * sizeT;
+    this.vy = -base * rand(1 - B.speedJitter, 1 + B.speedJitter);
+
+    this.place(world, place);
 
     this.swayAmp = rand(B.swayAmount * 0.4, B.swayAmount);
     this.swaySpeed = rand(B.swaySpeedMin, B.swaySpeedMax);
@@ -56,6 +53,32 @@ export class Bubble {
     // A slow tilt so the creature inside looks like it is floating, not pasted on.
     this.tilt = rand(-0.18, 0.18);
     this.tiltSpeed = rand(0.35, 0.75);
+  }
+
+  /**
+   * Rolls a fresh position. Called repeatedly by the spawner, which keeps
+   * whichever candidate ends up furthest from the other bubbles.
+   *
+   * Bubbles are allowed to hang slightly off the side edges: portrait is only
+   * ~460 units wide, so keeping every one fully inside would confine the big
+   * ones to the middle third and read as a clump down the centre.
+   */
+  place(world, where = 'below') {
+    // A bubble placed straight onto the screen would otherwise blink into
+    // existence. Ones climbing in from below need no such help.
+    this.fadeIn = where !== 'below';
+
+    this.homeX = rand(this.r * 0.62, world.w - this.r * 0.62);
+    this.x = this.homeX;
+
+    if (where === 'anywhere') {
+      this.y = rand(world.h * 0.24, world.h - this.r * 0.6);
+    } else if (where === 'low') {
+      this.y = rand(world.h * 0.62, world.h - this.r * 0.35);
+    } else {
+      // Staggered depths so a top-up burst does not arrive as a straight line.
+      this.y = world.h + this.r + rand(20, 300);
+    }
   }
 
   update(dt, world) {
@@ -82,6 +105,16 @@ export class Bubble {
     const wobble = Math.sin(this.t * this.tiltSpeed * TAU + this.phase);
 
     ctx.save();
+
+    // Swell into view, so a refilled bubble looks like it formed rather than
+    // like the game glitched one onto the screen.
+    if (this.fadeIn && this.t < INTRO_TIME) {
+      const k = easeOutCubic(this.t / INTRO_TIME);
+      ctx.globalAlpha = k;
+      ctx.translate(x, y);
+      ctx.scale(0.55 + 0.45 * k, 0.55 + 0.45 * k);
+      ctx.translate(-x, -y);
+    }
 
     // --- soft shadow so the bubble sits above the sky ------------------------
     ctx.beginPath();

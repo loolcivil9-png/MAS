@@ -6,7 +6,7 @@
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
-import { Pool, Timers, clamp, rand } from './util.js';
+import { Pool, Timers, clamp } from './util.js';
 import { Background } from './background.js';
 import { Bubble } from './bubble.js';
 import { FreedCreature } from './creaturePop.js';
@@ -32,6 +32,7 @@ const pmRestart = document.getElementById('pm-restart');
 const pmClose = document.getElementById('pm-close');
 
 document.getElementById('splash-title').textContent = CONFIG.title;
+document.getElementById('splash-version').textContent = `v${CONFIG.version}`;
 document.title = CONFIG.title;
 
 /* --- world ------------------------------------------------------------------ */
@@ -151,7 +152,14 @@ function onPoint(x, y, kind) {
   }
 
   // Touching empty screen still gets an answer. Nothing he does is ever ignored.
-  if (!hitAny && kind === 'down') celebrations.onMiss(x, y);
+  if (!hitAny && kind === 'down') {
+    celebrations.onMiss(x, y);
+  } else if (hitAny && visibleBubbles() === 0) {
+    // He cleared the whole screen in one smear. Refill right here rather than
+    // waiting for the next update, so not even a single frame gets drawn empty.
+    spawnBubble('low');
+    spawnTimer = 0.1;
+  }
 }
 
 function popBubble(b) {
@@ -171,6 +179,15 @@ function liveBubbles() {
   return n;
 }
 
+/** Bubbles at least partly in view right now — not the ones still climbing up. */
+function visibleBubbles() {
+  let n = 0;
+  for (const b of bubbles.items) {
+    if (b.active && b.y - b.r < world.h && b.y + b.r > 0) n++;
+  }
+  return n;
+}
+
 function isDuplicate(bubble) {
   for (const o of bubbles.items) {
     if (o !== bubble && o.active && o.creature === bubble.creature) return true;
@@ -178,46 +195,132 @@ function isDuplicate(bubble) {
   return false;
 }
 
-function spawnBubble(spread = false) {
+/**
+ * Smallest edge-to-edge gap between this bubble and any other live one.
+ * Negative means they overlap; Infinity means it has the sky to itself.
+ */
+function smallestGap(bubble) {
+  let min = Infinity;
+  for (const o of bubbles.items) {
+    if (o === bubble || !o.active) continue;
+    const gap = Math.hypot(o.x - bubble.x, o.y - bubble.y) - (o.r + bubble.r);
+    if (gap < min) min = gap;
+  }
+  return min;
+}
+
+function spawnBubble(place = 'below') {
   const b = bubbles.acquire();
+
   // Re-roll a few times to avoid two of the same animal on screen at once.
   // Early on only a dozen creatures have unlocked, so collisions are common and
   // a screen with two identical dogs on it looks like a bug.
   for (let attempt = 0; attempt < 8; attempt++) {
-    b.spawn(world, hud.score, { spread });
+    b.spawn(world, hud.score, { place });
     if (!isDuplicate(b)) break;
   }
+
+  // Then throw darts and keep the roomiest spot. Purely random placement is
+  // what made them pile on top of each other — in a space this narrow, clumping
+  // is the *likely* outcome of uniform random, not the unlucky one.
+  let bestX = b.x;
+  let bestY = b.y;
+  let bestGap = -Infinity;
+  for (let i = 0; i < CONFIG.bubble.placementTries; i++) {
+    b.place(world, place);
+    const gap = smallestGap(b);
+    if (gap > bestGap) { bestGap = gap; bestX = b.x; bestY = b.y; }
+    if (gap === Infinity) break; // nothing to avoid
+  }
+  b.homeX = bestX;
+  b.x = bestX;
+  b.y = bestY;
+
   return b;
 }
 
-/**
- * Opens with a full screen of bubbles rather than an empty sky, laid out in
- * alternating bands so the first thing he sees is composed rather than clumped.
- */
+/** Opens with a full screen of well-spaced bubbles rather than an empty sky. */
 function fillScreen() {
-  const n = CONFIG.bubble.maxOnScreen;
-  for (let i = 0; i < n; i++) {
-    const b = spawnBubble(true);
-    // Starts below the star row so the opening screen never hides the HUD.
-    b.y = world.h * (0.22 + ((i + 0.5) / n) * 0.72);
-    b.homeX = clamp(
-      world.w * (i % 2 === 0 ? 0.31 : 0.69) + rand(-world.w * 0.13, world.w * 0.13),
-      b.r * 0.62,
-      world.w - b.r * 0.62,
-    );
-    b.x = b.homeX;
-  }
+  for (let i = 0; i < CONFIG.bubble.maxOnScreen; i++) spawnBubble('anywhere');
 }
 
 function manageBubbles(dt) {
   const B = CONFIG.bubble;
-  const live = liveBubbles();
 
   spawnTimer -= dt;
-  if (live < B.maxOnScreen && spawnTimer <= 0) {
-    spawnBubble();
-    // Refill quickly when he has just cleared the screen with one big smear.
-    spawnTimer = live < B.minOnScreen ? B.spawnInterval * 0.3 : B.spawnInterval;
+
+  const visible = visibleBubbles();
+  const live = liveBubbles();
+
+  // An empty screen ignores the spawn timer entirely — it is the one state the
+  // game must never sit in, even for a fraction of a second.
+  if (visible === 0 && live < B.maxOnScreen + 2) {
+    spawnBubble('low');
+    spawnTimer = 0.1;
+    return;
+  }
+
+  if (spawnTimer > 0) return;
+
+  // Hard floor: the screen must never be empty. A bubble spawned below the
+  // edge takes several seconds to climb into reach, so after he clears the
+  // screen with one big smear, waiting for the normal pipeline would leave him
+  // staring at nothing. Put these straight into the lower part of the screen
+  // instead, where they read as having just risen in.
+  if (visible < B.minVisible && live < B.maxOnScreen + 2) {
+    spawnBubble('low');
+    spawnTimer = 0.12;
+    return;
+  }
+
+  if (live < B.maxOnScreen) {
+    spawnBubble('below');
+    spawnTimer = live < B.minOnScreen ? B.spawnInterval * 0.35 : B.spawnInterval;
+  }
+}
+
+/**
+ * Nudges overlapping bubbles apart, sideways only.
+ *
+ * Spawning them in roomy spots is not enough on its own — they rise at very
+ * different speeds and sway independently, so any well-spaced screenful slowly
+ * converges into a pile. This keeps them readable as separate targets. Only
+ * `homeX` is touched, so their rise speeds stay exactly as designed.
+ *
+ * Tuned by `separationMargin` and `separationSpeed` in config.js.
+ */
+function separateBubbles(dt) {
+  const B = CONFIG.bubble;
+  const items = bubbles.items;
+
+  for (let i = 0; i < items.length; i++) {
+    const a = items[i];
+    if (!a.active) continue;
+
+    for (let j = i + 1; j < items.length; j++) {
+      const b = items[j];
+      if (!b.active) continue;
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const want = (a.r + b.r) * B.separationMargin;
+      const overlap = want - dist;
+      if (overlap <= 0) continue;
+
+      // Proportional to how badly they crowd each other, so it eases off
+      // rather than snapping them apart.
+      const push = (overlap / want) * B.separationSpeed * dt;
+      const dir = dx !== 0 ? Math.sign(dx) : 1;
+      a.homeX -= dir * push;
+      b.homeX += dir * push;
+    }
+  }
+
+  for (const b of items) {
+    if (!b.active) continue;
+    const edge = b.r * 0.62;
+    b.homeX = clamp(b.homeX, edge, Math.max(edge, world.w - edge));
   }
 }
 
@@ -229,6 +332,7 @@ function update(dt) {
   manageBubbles(dt);
 
   for (const b of bubbles.items) if (b.active) b.update(dt, world);
+  separateBubbles(dt);
   for (const c of freed.items) if (c.active) c.update(dt, world);
 
   particles.update(dt, world);
