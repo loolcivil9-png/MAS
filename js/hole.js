@@ -1,9 +1,14 @@
 /* ---------------------------------------------------------------------------
    The Hole — the character he plays.
 
-   A dark ellipse with a glowing rim and googly eyes that chases his finger.
-   It is deliberately a *someone*, not a mechanic: it bobs while it waits,
-   blinks, squashes happily when it swallows, and boings when it grows.
+   A dark ellipse with a glowing rim and googly eyes. It is deliberately a
+   *someone*, not a mechanic: it bobs while it waits, blinks, squashes happily
+   when it swallows, and boings when it grows.
+
+   Steering is RELATIVE, like a thumb-stick. The finger's *movement* commands
+   a velocity — its position on the glass means nothing — so a small hand can
+   drive from the corner of the screen without ever covering the action.
+   Hold still and the hole eases to a stop; let go and it glides out.
 
    The important numbers:
      `r`       the true radius — what actually decides if a thing fits
@@ -17,8 +22,9 @@ import { TAU, clamp, lerp, hsla } from './util.js';
 export class Hole {
   constructor() {
     this.x = 0; this.y = 0;
-    this.tx = 0; this.ty = 0;
-    this.following = false;
+    this.vx = 0; this.vy = 0;
+    this.inX = 0; this.inY = 0;   // finger movement gathered this frame
+    this.touching = false;
     this.r = CONFIG.hole.baseRadius;
     this.rShown = this.r;
     this.rVel = 0;
@@ -27,53 +33,79 @@ export class Hole {
     this.lookX = 0; this.lookY = 0;   // smoothed travel direction, drives the eyes
   }
 
-  /** A fresh level: small again, resting in the lower middle of the world. */
-  reset(world) {
-    this.x = world.w / 2;
-    this.y = world.h * 0.62;
-    this.tx = this.x;
-    this.ty = this.y;
+  /** A fresh start: small again, resting in the middle of the world. */
+  reset(bounds) {
+    this.x = bounds.w / 2;
+    this.y = bounds.h / 2;
+    this.vx = 0;
+    this.vy = 0;
+    this.inX = 0;
+    this.inY = 0;
     this.r = CONFIG.hole.baseRadius;
     this.rShown = this.r;
     this.rVel = 0;
     this.gulpT = 0;
-    this.following = false;
+    this.touching = false;
   }
 
   /** How big a thing can be and still fit down the hole. */
   get mouth() { return this.r * CONFIG.hole.mouthRatio; }
 
-  setTarget(x, y) { this.tx = x; this.ty = y; this.following = true; }
-  release() { this.following = false; }
+  /** Finger moved this much (in world units). Accumulated until the next update. */
+  steer(dx, dy) {
+    this.inX += dx;
+    this.inY += dy;
+    this.touching = true;
+  }
+
+  release() { this.touching = false; }
 
   grow(amount) { this.r += amount; }
 
   /** The happy squash-and-stretch right after a swallow. */
   gulp() { this.gulpT = 1; }
 
-  update(dt, world) {
+  update(dt, bounds) {
     this.t += dt;
     const H = CONFIG.hole;
 
-    if (this.following) {
-      // Frame-rate-independent chase: eager enough to feel obedient, soft
-      // enough that the runners are a funny pursuit rather than instant.
-      const k = 1 - Math.exp(-H.followK * dt);
-      const nx = this.x + (this.tx - this.x) * k;
-      const ny = this.y + (this.ty - this.y) * k;
-      this.lookX = lerp(this.lookX, nx - this.x, 0.25);
-      this.lookY = lerp(this.lookY, ny - this.y, 0.25);
-      this.x = nx;
-      this.y = ny;
-    } else {
-      this.lookX *= 0.9;
-      this.lookY *= 0.9;
-    }
+    if (this.touching) {
+      // The finger's speed this frame becomes the commanded velocity, capped
+      // at the hole's top speed (which creeps up a little as it grows, so a
+      // big hole feels mighty rather than sluggish on a zoomed-out camera).
+      const maxV = H.maxSpeed + this.rShown * 0.8;
+      let tx = (this.inX / Math.max(dt, 1e-4)) * H.steerGain;
+      let ty = (this.inY / Math.max(dt, 1e-4)) * H.steerGain;
+      const m = Math.hypot(tx, ty);
+      if (m > maxV) { tx *= maxV / m; ty *= maxV / m; }
 
-    // Never hides under a notch or wanders out of reach.
+      const k = 1 - Math.exp(-H.accelK * dt);
+      this.vx += (tx - this.vx) * k;
+      this.vy += (ty - this.vy) * k;
+    } else {
+      // Let go: coast out gently rather than stopping dead.
+      const d = Math.exp(-H.glideDamp * dt);
+      this.vx *= d;
+      this.vy *= d;
+    }
+    this.inX = 0;
+    this.inY = 0;
+
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+
+    // The world has edges; the hole stops at them without fuss.
     const m = this.rShown * 0.3;
-    this.x = clamp(this.x, world.safe.l + m, world.w - world.safe.r - m);
-    this.y = clamp(this.y, world.safe.t + m, world.h - world.safe.b - m);
+    const cx = clamp(this.x, m, bounds.w - m);
+    const cy = clamp(this.y, m, bounds.h - m);
+    if (cx !== this.x) this.vx = 0;
+    if (cy !== this.y) this.vy = 0;
+    this.x = cx;
+    this.y = cy;
+
+    // The eyes glance along the direction of travel.
+    this.lookX = lerp(this.lookX, this.vx, 1 - Math.exp(-8 * dt));
+    this.lookY = lerp(this.lookY, this.vy, 1 - Math.exp(-8 * dt));
 
     // The growth spring: rShown boings toward r and settles.
     this.rVel += (this.r - this.rShown) * H.springK * dt;
@@ -83,10 +115,13 @@ export class Hole {
     if (this.gulpT > 0) this.gulpT = Math.max(0, this.gulpT - dt * 2.4);
   }
 
+  get speed() { return Math.hypot(this.vx, this.vy); }
+
   draw(ctx) {
     const H = CONFIG.hole;
     const r = Math.max(6, this.rShown);
-    const bob = this.following ? 0 : Math.sin(this.t * 1.8) * H.idleBob;
+    const resting = !this.touching && this.speed < 12;
+    const bob = resting ? Math.sin(this.t * 1.8) * H.idleBob : 0;
 
     const squash = this.gulpT > 0 ? Math.sin(this.gulpT * Math.PI) * H.gulpSquash : 0;
 
@@ -155,8 +190,8 @@ export class Hole {
     // Pupils drift toward the direction of travel; at rest they peek down
     // into the hole, which reads as "I am hungry".
     const mag = Math.hypot(this.lookX, this.lookY);
-    const px = mag > 0.5 ? (this.lookX / mag) * eyeR * 0.38 : 0;
-    const py = mag > 0.5 ? (this.lookY / mag) * eyeR * 0.38 : eyeR * 0.3;
+    const px = mag > 14 ? (this.lookX / mag) * eyeR * 0.38 : 0;
+    const py = mag > 14 ? (this.lookY / mag) * eyeR * 0.38 : eyeR * 0.3;
 
     for (const side of [-1, 1]) {
       ctx.save();

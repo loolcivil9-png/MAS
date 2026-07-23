@@ -100,9 +100,10 @@ export class Thing {
   }
 
   /**
+   * @param {{w: number, h: number}} bounds the world the thing lives in
    * @returns {'eaten' | null} 'eaten' on the frame the swallow completes.
    */
-  update(dt, world, hole) {
+  update(dt, bounds, hole) {
     const T = CONFIG.things;
     this.t += dt;
     if (this.introT < T.introTime) this.introT += dt;
@@ -124,7 +125,7 @@ export class Thing {
       return null;
     }
 
-    if (this.runner) this.#flee(dt, world, hole);
+    if (this.runner) this.#flee(dt, bounds, hole);
 
     return null;
   }
@@ -134,7 +135,7 @@ export class Thing {
    * is well under the hole's chase speed, so the pursuit is comedy, not
    * challenge. Everything is always catchable.
    */
-  #flee(dt, world, hole) {
+  #flee(dt, bounds, hole) {
     const T = CONFIG.things;
     const dx = this.x - hole.x;
     const dy = this.y - hole.y;
@@ -156,15 +157,14 @@ export class Thing {
 
     this.x += this.fleeVx * dt;
     this.y += this.fleeVy * dt;
-    this.clampInto(world);
+    this.clampInto(bounds);
   }
 
-  /** Keeps a thing inside the playfield (also used after a resize). */
-  clampInto(world) {
-    const T = CONFIG.things;
+  /** Keeps a thing inside the world. */
+  clampInto(bounds) {
     const m = this.size * 0.6;
-    this.x = clamp(this.x, world.safe.l + m, world.w - world.safe.r - m);
-    this.y = clamp(this.y, world.safe.t + T.hudBand + m, world.h - world.safe.b - m);
+    this.x = clamp(this.x, m, bounds.w - m);
+    this.y = clamp(this.y, m, bounds.h - m);
   }
 
   draw(ctx) {

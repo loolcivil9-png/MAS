@@ -94,6 +94,13 @@ const PALETTES = [
   },
 ];
 
+/** Cheap deterministic 0..1 hash for ground decoration — stable every frame. */
+function groundHash(x, y, salt) {
+  let h = (x * 374761393 + y * 668265263 + salt * 1442695041) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
 /** Shortest way round the colour wheel, so a crossfade never sweeps the rainbow. */
 function lerpHue(a, b, t) {
   const d = ((b - a + 540) % 360) - 180;
@@ -201,6 +208,59 @@ export class Background {
     this.#drawSun(ctx, w, h, p);
     this.#drawClouds(ctx, w, h, p);
     this.#drawHills(ctx, w, h, p);
+  }
+
+  /**
+   * The ground the hole travels over, drawn in WORLD space under the camera.
+   * The sky above is fixed to the screen; these markings are what actually
+   * scroll, so they are what makes movement visible. Deterministic per grid
+   * cell — no allocation, no stored state, stable across frames.
+   * @param {{x: number, y: number, w: number, h: number}} view visible world rect
+   * @param {{w: number, h: number}} field world bounds
+   */
+  drawGround(ctx, view, field) {
+    const p = this.palette();
+    const CELL = 240;
+
+    const x0 = Math.floor(view.x / CELL) - 1;
+    const y0 = Math.floor(view.y / CELL) - 1;
+    const x1 = Math.ceil((view.x + view.w) / CELL) + 1;
+    const y1 = Math.ceil((view.y + view.h) / CELL) + 1;
+
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        // Soft meadow blotches in the sky's own hill colour.
+        const r1 = groundHash(cx, cy, 1);
+        const bx = (cx + groundHash(cx, cy, 2)) * CELL;
+        const by = (cy + groundHash(cx, cy, 3)) * CELL;
+        if (bx > 0 && by > 0 && bx < field.w && by < field.h) {
+          ctx.beginPath();
+          ctx.ellipse(bx, by, 40 + r1 * 90, (40 + r1 * 90) * 0.6, r1 * TAU, 0, TAU);
+          ctx.fillStyle = hsla(p.hillFar[0], p.hillFar[1], p.hillFar[2], 0.1 + r1 * 0.08);
+          ctx.fill();
+        }
+
+        // A few crisp little dots — pebbles, daisies, snow, stars underfoot.
+        for (let i = 0; i < 3; i++) {
+          const dx = (cx + groundHash(cx, cy, 4 + i)) * CELL;
+          const dy = (cy + groundHash(cx, cy, 7 + i)) * CELL;
+          if (dx < 0 || dy < 0 || dx > field.w || dy > field.h) continue;
+          const dr = 3 + groundHash(cx, cy, 10 + i) * 4;
+          ctx.beginPath();
+          ctx.arc(dx, dy, dr, 0, TAU);
+          ctx.fillStyle = hsla(p.cloud[0], p.cloud[1], p.cloud[2], 0.32);
+          ctx.fill();
+        }
+      }
+    }
+
+    // The edge of the world: a soft, friendly boundary rather than a wall.
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = hsla(p.hillNear[0], p.hillNear[1], Math.max(10, p.hillNear[2] - 8), 0.5);
+    ctx.strokeRect(7, 7, field.w - 14, field.h - 14);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = hsla(p.cloud[0], p.cloud[1], p.cloud[2], 0.35);
+    ctx.strokeRect(24, 24, field.w - 48, field.h - 48);
   }
 
   #drawSky(ctx, w, h, p) {

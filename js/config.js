@@ -8,7 +8,7 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '2.0.0',
+  version: '2.1.0',
 
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Hungry Hole". */
@@ -25,23 +25,43 @@ export const CONFIG = {
     maxDelta: 0.05,        // seconds; stops everything teleporting after the screen locks
   },
 
+  /* --- the world and the camera -------------------------------------------- */
+  /* The world is bigger than the screen. The camera rides on the hole and
+     zooms out as it grows, exactly like the game this one is modelled on. */
+  world: {
+    scale: 2.2,            // the world is this many screens wide and tall
+  },
+  camera: {
+    holeScreenFrac: 0.085, // the hole tries to appear this fraction of screen height
+    minZoom: 0.42,         // fully grown: see this much more world (smaller = wider)
+    maxZoom: 0.85,         // starting view is already a little pulled back
+    posK: 5.5,             // how snappily the camera catches up to the hole
+    zoomK: 2.2,            // how smoothly the zoom glides between sizes
+    lookAhead: 0.22,       // seconds of velocity the camera leads by
+  },
+
   /* --- the hole ------------------------------------------------------------ */
+  /* Steering is RELATIVE, like a joystick: the finger's movement sets the
+     hole's direction and speed, wherever on the glass the finger happens to
+     be. Hold still and the hole eases to a stop; let go and it glides out. */
   hole: {
     baseRadius: 40,        // how small it starts each level: only tier-1 fits at first
     mouthRatio: 1.0,       // a thing fits when its size <= hole radius * this
-    followK: 9,            // how eagerly it chases his finger (higher = snappier)
+    maxSpeed: 560,         // world units per second, plus a little as it grows
+    steerGain: 1.4,        // hole speed vs finger speed — slightly faster feels obedient
+    accelK: 10,            // how quickly it reaches the commanded speed
+    glideDamp: 3.2,        // how quickly it coasts to a stop after a flick
     springK: 130,          // the boing when it grows...
     springDamp: 0.86,      // ...and how quickly the boing settles
     gulpSquash: 0.2,       // how hard it squashes when it swallows
-    idleBob: 6,            // gentle breathing while nobody is touching the screen
+    idleBob: 6,            // gentle breathing while it sits still
   },
 
   /* --- the things it eats -------------------------------------------------- */
   things: {
     tierSizes: [30, 48, 72, 104, 150],  // logical radius per tier; tier 5 is the landmark
-    counts: [12, 8, 5, 3, 1],           // how many of each tier fill a level
+    counts: [18, 12, 8, 5, 1],          // how many of each tier fill the whole world
     placementTries: 18,    // candidate positions tested; the roomiest one wins
-    hudBand: 130,          // nothing spawns behind the star row at the top
     overlapFactor: 1.0,    // eating starts when the hole's edge reaches a thing...
     thingHit: 0.8,         // ...this deep into its body. Generous on purpose:
                            // he aims AT things, he does not centre on them
@@ -60,7 +80,7 @@ export const CONFIG = {
     goldenGrowthMult: 2.5, // the golden thing grows the hole this much extra
     magnetFromLevel: 2,    // the magnet appears from this level on
     magnetSeconds: 5,      // how long everything nearby slides in on its own
-    magnetRadius: 450,     // how far the magnet reaches
+    magnetRadius: 560,     // how far the magnet reaches
     magnetAccel: 900,      // how hard it pulls
   },
 

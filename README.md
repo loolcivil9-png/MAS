@@ -21,18 +21,32 @@ The whole folder is a deployable static site.
 
 And around how a three-year-old actually uses a phone:
 
-- **The hole chases the finger** with a soft ease — no aiming, no tapping
-  precision, no way to steer wrong
-- **Ten fingers work at once.** The newest finger wins; lifting it hands the
-  hole to the next one still down. A palm-slam is just a lot of downs
+- **The finger is a joystick, not a pointer.** The finger's *movement* steers
+  the hole — its position on the glass means nothing. He can drive from the
+  corner of the screen without ever covering the action with his hand, and
+  there is no aiming and no precision to get wrong. Hold still and the hole
+  eases to a stop; let go and it glides out
+- **Ten fingers work at once.** The newest finger steers; lifting it hands
+  control to the next one still down. A palm-slam is just a lot of downs
 - **No way out.** Zoom, scroll, pull-to-refresh, long-press menus and text
   selection are all disabled. The only exit is a two-second press-and-hold
 
+## A world bigger than the screen
+
+The world is a little over **two screens wide and two screens tall**, with
+everything spread comfortably across it. A camera rides on the hole with a
+touch of lookahead, and **zooms out as the hole grows** — the world visibly
+"gets smaller" around it, which is the whole fantasy. Themed ground markings
+scroll underfoot so movement always reads, a soft border marks the edge of the
+world, and when only a few things are left, **golden arrows at the screen edge
+point toward any stragglers** — the last strawberry can never become a
+dead end.
+
 ## How a level works
 
-A level is one screenful of a little world — about 30 things in five sizes,
-from strawberries and flowers up through teddies, cars and houses to one giant
-landmark. The hole starts small enough that only the tiny things fit.
+A level is one whole world — about 44 things in five sizes scattered across
+it, from strawberries and flowers up through teddies, cars and houses to one
+giant landmark. The hole starts small enough that only the tiny things fit.
 
 | When | What happens |
 | --- | --- |
@@ -140,9 +154,12 @@ The dials that matter most:
 
 - `hole.baseRadius` — how small each level starts. Raise it and the mediums
   fit sooner; lower it and the early scramble lasts longer
-- `hole.followK` — how eagerly the hole chases his finger
+- `hole.maxSpeed` and `hole.steerGain` — how fast the hole drives, and how
+  much faster than the finger it moves
+- `world.scale` — how many screens wide and tall the world is
+- `camera.minZoom` / `maxZoom` — how far the camera pulls back as it grows
 - `things.counts` — things per size tier; the main "how long is a level" dial
-- `things.tierSizes` — how big each tier is on screen
+- `things.tierSizes` — how big each tier is
 - `things.runnerSpeed` — how fast the runners flee (keep it well under the
   hole's speed; the chase must always be winnable)
 - `special.magnetSeconds` / `magnetRadius` — how big the superpower feels

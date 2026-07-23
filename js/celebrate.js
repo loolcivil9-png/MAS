@@ -24,12 +24,19 @@ import { BIG_CHEERS, MEGA_CHEERS } from './catalog.js';
 import { met, markDirty, flushSave } from './save.js';
 
 export class Celebrations {
-  constructor({ particles, hud, timers, world, background }) {
+  /**
+   * `particles` lives in FIELD space (sparkles at the things themselves);
+   * `fx` lives in SCREEN space (confetti, fireworks); `toScreen` converts a
+   * field point to screen for the star that flies up into the HUD row.
+   */
+  constructor({ particles, fx, hud, timers, world, background, toScreen }) {
     this.particles = particles;
+    this.fx = fx ?? particles;
     this.hud = hud;
     this.timers = timers;
     this.world = world;
     this.background = background;
+    this.toScreen = toScreen ?? ((x, y) => ({ x, y }));
 
     // Stars already promised to the row, including any still in flight. Without
     // this, two eats in the same moment both see the old star count and send
@@ -93,7 +100,10 @@ export class Celebrations {
     }
 
     this.eatenThisLevel++;
-    this.#advance(x, y);
+    // The flying star travels across the SCREEN, wherever the camera was
+    // looking when the gulp landed.
+    const s = this.toScreen(x, y);
+    this.#advance(s.x, s.y);
   }
 
   /**
@@ -153,7 +163,7 @@ export class Celebrations {
   /* --- winning ------------------------------------------------------------ */
 
   #levelUp() {
-    const { particles, hud, timers, world, background } = this;
+    const { fx, hud, timers, world, background } = this;
     const C = CONFIG.celebrate;
 
     const completed = hud.level;
@@ -174,7 +184,7 @@ export class Celebrations {
     hud.showFlash(mega ? 1.4 : 0.95, { rainbow: true });
     hud.showBanner(mega ? 'mega' : 'party', mega ? 3.6 : 3.0);
 
-    particles.confettiShower(world, mega ? 200 : 140, mega ? 1.6 : 1.15);
+    fx.confettiShower(world, mega ? 200 : 140, mega ? 1.6 : 1.15);
     audio.cheer(mega ? 2.7 : 2.1);
     if (mega) audio.fanfare();
     else { audio.chime(7); audio.kick(); }
@@ -182,7 +192,7 @@ export class Celebrations {
     const bursts = mega ? 7 : 5;
     for (let i = 0; i < bursts; i++) {
       timers.after(i * 0.26, () => {
-        particles.firework(
+        fx.firework(
           rand(world.w * 0.15, world.w * 0.85),
           rand(world.h * 0.16, world.h * 0.58),
           rand(0, 360),
@@ -192,7 +202,7 @@ export class Celebrations {
       });
     }
 
-    if (mega) timers.after(0.95, () => particles.confettiShower(world, 160, 1.4));
+    if (mega) timers.after(0.95, () => fx.confettiShower(world, 160, 1.4));
 
     // Praise first, then the new level number — spaced so they do not collide,
     // and both timed to land over the tail of the bang rather than under it.

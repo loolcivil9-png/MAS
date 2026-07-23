@@ -1,9 +1,18 @@
 /* ---------------------------------------------------------------------------
    Hungry Hole — bootstrap and game loop.
 
-   Owns the canvas, the logical coordinate space, the hole, the world of
-   things it eats, and the glue between input, celebrations and the
-   grown-ups menu.
+   Two coordinate spaces, deliberately kept apart:
+
+     SCREEN  the logical viewport (always 1000 units tall). The sky, the HUD,
+             the win confetti and the surprises live here.
+
+     FIELD   the world itself — CONFIG.world.scale screens wide and tall.
+             The hole, the things it eats, and their sparkles live here, and
+             a camera (position + zoom) maps field to screen. The camera
+             rides on the hole and pulls back as it grows.
+
+   Steering is relative: the finger's movement drives the hole's velocity;
+   where the finger sits on the glass is irrelevant.
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
@@ -39,9 +48,9 @@ document.getElementById('splash-title').textContent = CONFIG.title;
 document.getElementById('splash-version').textContent = `v${CONFIG.version}`;
 document.title = CONFIG.title;
 
-/* --- world ------------------------------------------------------------------ */
+/* --- screen space ------------------------------------------------------------ */
 
-/** Logical space: always 1000 units tall, width follows the aspect ratio. */
+/** Logical viewport: always 1000 units tall, width follows the aspect ratio. */
 const world = {
   w: 462,
   h: CONFIG.render.logicalHeight,
@@ -51,17 +60,58 @@ const world = {
 let scale = 1;                                    // device pixels per logical unit
 let viewport = { left: 0, top: 0, width: 1, height: 1 };
 
+/* --- field space ------------------------------------------------------------- */
+
+/** The world the hole lives in — several screens big. Sized per level. */
+const field = { w: 1000, h: 2200 };
+
+/** The camera: where on the field the screen is looking, and how wide. */
+const cam = { x: 500, y: 1100, zoom: CONFIG.camera.maxZoom };
+
+function updateCamera(dt) {
+  const C = CONFIG.camera;
+
+  // Zoom keeps the hole a steady fraction of the screen: growing pulls the
+  // camera back, so the world visibly "gets smaller" — the hole.io feeling.
+  const zt = clamp((world.h * C.holeScreenFrac) / hole.rShown, C.minZoom, C.maxZoom);
+  cam.zoom += (zt - cam.zoom) * (1 - Math.exp(-C.zoomK * dt));
+
+  // Follow with a touch of lookahead, so he sees where he is going.
+  const k = 1 - Math.exp(-C.posK * dt);
+  cam.x += (hole.x + hole.vx * C.lookAhead - cam.x) * k;
+  cam.y += (hole.y + hole.vy * C.lookAhead - cam.y) * k;
+
+  // Never show past the edge of the world.
+  const halfW = (world.w / 2) / cam.zoom;
+  const halfH = (world.h / 2) / cam.zoom;
+  cam.x = field.w > halfW * 2 ? clamp(cam.x, halfW, field.w - halfW) : field.w / 2;
+  cam.y = field.h > halfH * 2 ? clamp(cam.y, halfH, field.h - halfH) : field.h / 2;
+}
+
+const toScreen = (fx, fy) => ({
+  x: (fx - cam.x) * cam.zoom + world.w / 2,
+  y: (fy - cam.y) * cam.zoom + world.h / 2,
+});
+
+/** The field rectangle currently visible on screen. */
+function visibleRect() {
+  const halfW = (world.w / 2) / cam.zoom;
+  const halfH = (world.h / 2) / cam.zoom;
+  return { x: cam.x - halfW, y: cam.y - halfH, w: halfW * 2, h: halfH * 2 };
+}
+
 /* --- systems ---------------------------------------------------------------- */
 
 const background = new Background();
-const particles = new Particles();
+const particles = new Particles();   // field space: gulp sparkles, rings
+const fx = new Particles();          // screen space: confetti, fireworks, trails
 const hud = new Hud();
 const timers = new Timers();
-const celebrations = new Celebrations({ particles, hud, timers, world, background });
-const surprises = new Surprises(particles);
+const celebrations = new Celebrations({ particles, fx, hud, timers, world, background, toScreen });
+const surprises = new Surprises(fx);
 const hole = new Hole();
 
-const things = new Pool(40, () => new Thing());
+const things = new Pool(60, () => new Thing());
 
 let running = false;
 let started = false;
@@ -123,9 +173,6 @@ function resize() {
     b: (parseFloat(cs.paddingBottom) || 0) * k,
     l: (parseFloat(cs.paddingLeft) || 0) * k,
   };
-
-  // Nudge anything that the new width left hanging off the edge.
-  for (const th of things.items) if (th.active && th.state === 'idle') th.clampInto(world);
 }
 
 /**
@@ -155,17 +202,18 @@ window.addEventListener('resize', scheduleResize);
 window.addEventListener('orientationchange', scheduleResize);
 window.visualViewport?.addEventListener('resize', scheduleResize);
 
-/* --- input ------------------------------------------------------------------ */
+/* --- input: relative steering ------------------------------------------------ */
 
-const toWorld = (clientX, clientY) => ({
+const toLogical = (clientX, clientY) => ({
   x: ((clientX - viewport.left) / viewport.width) * world.w,
   y: ((clientY - viewport.top) / viewport.height) * world.h,
 });
 
-// Fingers currently on the screen, in press order. The hole obeys the newest;
-// when it lifts, an older finger that is still down takes over. A palm-slam is
-// just a lot of downs — nothing bad can happen.
+// Fingers currently on the screen, in press order, plus each one's last seen
+// position. The newest finger steers; when it lifts, an older finger that is
+// still down takes over. A palm-slam is just a lot of downs.
 const pointers = [];
+const lastPt = new Map();
 
 function onPoint(x, y, kind, pointerId) {
   if (!running) return;
@@ -174,21 +222,26 @@ function onPoint(x, y, kind, pointerId) {
     const i = pointers.indexOf(pointerId);
     if (i !== -1) pointers.splice(i, 1);
     pointers.push(pointerId);
-    hole.setTarget(x, y);
-    // Every touch is answered: the hole turns to come, and the spot sparkles.
-    celebrations.onMiss(x, y);
+    lastPt.set(pointerId, { x, y });
+    // Every touch is answered: the hole perks up and sparkles.
+    particles.sparkleBurst(hole.x, hole.y - hole.rShown, rand(0, 360), 4);
+    hole.steer(0, 0); // wakes the "I am being driven" state without moving
   } else if (kind === 'move') {
-    if (pointers[pointers.length - 1] === pointerId) hole.setTarget(x, y);
+    const p = lastPt.get(pointerId);
+    lastPt.set(pointerId, { x, y });
+    if (!p || pointers[pointers.length - 1] !== pointerId) return;
+    // A screen-space finger stroke commands the same on-screen motion at any
+    // zoom, so dividing by the camera zoom converts it to field units.
+    hole.steer((x - p.x) / cam.zoom, (y - p.y) / cam.zoom);
   } else { // 'up'
     const i = pointers.indexOf(pointerId);
     if (i !== -1) pointers.splice(i, 1);
+    lastPt.delete(pointerId);
     if (pointers.length === 0) hole.release();
-    // Otherwise the hole keeps heading for its last target until the finger
-    // that now owns it moves — which reads as exactly what it is.
   }
 }
 
-attachInput(canvas, toWorld, onPoint);
+attachInput(canvas, toLogical, onPoint);
 suppressBrowserGestures(document);
 
 /* --- building a world -------------------------------------------------------- */
@@ -200,9 +253,10 @@ function activeThings() {
 }
 
 /**
- * Lays out a fresh world: `counts` things per tier, biggest placed first into
- * the roomiest spots (dart-throwing, keep the candidate furthest from the
- * already-placed), one golden growth-spurt thing, and from level 2 a magnet.
+ * Lays out a fresh world across the whole field: `counts` things per tier,
+ * biggest placed first into the roomiest spots (dart-throwing, keep the
+ * candidate furthest from the already-placed), one golden growth-spurt
+ * thing, and from level 2 a magnet.
  *
  * Growth is then NORMALIZED: the shares of all non-landmark things sum to
  * exactly the growth needed for the landmark to fit (times a small margin).
@@ -214,6 +268,11 @@ function buildLevel(level) {
   const T = CONFIG.things;
   things.releaseAll();
 
+  // The field spans several screens of the current aspect ratio, and stays
+  // fixed for the whole level even if the device rotates mid-way.
+  field.w = Math.round(world.w * CONFIG.world.scale);
+  field.h = Math.round(world.h * CONFIG.world.scale);
+
   const list = buildLevelList(background.theme, T.counts);
   list.sort((a, b) => b.tier - a.tier);
 
@@ -223,22 +282,19 @@ function buildLevel(level) {
   const placed = [{
     x: hole.x,
     y: hole.y,
-    size: Math.max(hole.rShown, CONFIG.hole.baseRadius) + CONFIG.things.tierSizes[0],
+    size: Math.max(hole.rShown, CONFIG.hole.baseRadius) + T.tierSizes[0],
   }];
+
   for (const { entry, tier } of list) {
     const size = T.tierSizes[tier];
-    const m = size * 0.6;
-    const loX = world.safe.l + m;
-    const hiX = Math.max(loX, world.w - world.safe.r - m);
-    const loY = world.safe.t + T.hudBand + m;
-    const hiY = Math.max(loY, world.h - world.safe.b - m);
+    const m = size * 0.7;
 
-    let bestX = world.w / 2;
-    let bestY = world.h / 2;
+    let bestX = field.w / 2;
+    let bestY = field.h / 2;
     let bestGap = -Infinity;
     for (let i = 0; i < T.placementTries; i++) {
-      const x = rand(loX, hiX);
-      const y = rand(loY, hiY);
+      const x = rand(m, field.w - m);
+      const y = rand(m, field.h - m);
       let gap = Infinity;
       for (const p of placed) {
         gap = Math.min(gap, Math.hypot(p.x - x, p.y - y) - (p.size + size));
@@ -343,7 +399,7 @@ function magnetPull(dt) {
     const dist = Math.hypot(dx, dy) || 1;
     if (dist > S.magnetRadius) continue;
 
-    const speed = Math.min(620, 140 + dist * 2.2);
+    const speed = Math.min(680, 160 + dist * 2.2);
     th.x += (dx / dist) * speed * dt;
     th.y += (dy / dist) * speed * dt;
     if (Math.random() < dt * 7) particles.sparkleBurst(th.x, th.y, 200, 1);
@@ -370,7 +426,8 @@ function update(dt) {
   timers.update(dt);
   background.update(dt);
   surprises.update(dt, world);
-  hole.update(dt, world);
+  hole.update(dt, field);
+  updateCamera(dt);
 
   if (magnetT > 0) {
     magnetT -= dt;
@@ -381,27 +438,100 @@ function update(dt) {
 
   for (const th of things.items) {
     if (!th.active) continue;
-    if (th.update(dt, world, hole) === 'eaten') onEaten(th);
+    if (th.update(dt, field, hole) === 'eaten') onEaten(th);
   }
 
   checkCleanPlate();
-  particles.update(dt, world);
+  particles.update(dt, field);
+  fx.update(dt, world);
   hud.update(dt, world);
 }
 
 function render() {
+  // --- screen space: the sky ------------------------------------------------
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
-
   background.draw(ctx, world);
-  surprises.draw(ctx);   // behind everything he interacts with
-  hud.drawFlash(ctx, world);
+  surprises.draw(ctx);   // behind the world he plays in
 
+  // --- field space, through the camera --------------------------------------
+  const z = cam.zoom;
+  ctx.setTransform(
+    scale * z, 0, 0, scale * z,
+    scale * (world.w / 2 - cam.x * z),
+    scale * (world.h / 2 - cam.y * z),
+  );
+  background.drawGround(ctx, visibleRect(), field);
   hole.draw(ctx);
   // Things draw over the hole, so a swallowed one visibly spirals down INTO it.
-  for (const th of things.items) if (th.active) th.draw(ctx);
-
+  const view = visibleRect();
+  for (const th of things.items) {
+    if (!th.active) continue;
+    // Skip anything comfortably outside the camera — the field is big.
+    if (th.x + th.size * 2 < view.x || th.x - th.size * 2 > view.x + view.w
+      || th.y + th.size * 2 < view.y || th.y - th.size * 2 > view.y + view.h) continue;
+    th.draw(ctx);
+  }
   particles.draw(ctx);
+
+  // --- screen space again: overlays -----------------------------------------
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  hud.drawFlash(ctx, world);
+  fx.draw(ctx);
+  drawGuides(ctx);
   hud.draw(ctx, world);
+}
+
+/**
+ * When only a few things remain, gently point at the ones that are off
+ * screen. In a world several screens big, "where did the last strawberry
+ * go?" must never be a dead end.
+ */
+function drawGuides(ctx) {
+  const remaining = activeThings();
+  if (remaining === 0 || remaining > 4) return;
+
+  const cx = world.w / 2;
+  const cy = world.h / 2;
+  const inset = 74;
+
+  for (const th of things.items) {
+    if (!th.active || th.state !== 'idle') continue;
+    const s = toScreen(th.x, th.y);
+    const onScreen = s.x > -40 && s.x < world.w + 40 && s.y > -40 && s.y < world.h + 40;
+    if (onScreen) continue;
+
+    // Walk from the centre toward the target and stop at the screen border.
+    const dx = s.x - cx;
+    const dy = s.y - cy;
+    const tx = dx > 0 ? (world.w - inset - cx) / dx : dx < 0 ? (inset - cx) / dx : Infinity;
+    const ty = dy > 0 ? (world.h - inset - cy) / dy : dy < 0 ? (inset - cy) / dy : Infinity;
+    const t = Math.min(tx, ty);
+    if (!Number.isFinite(t) || t <= 0) continue;
+
+    const ax = cx + dx * t;
+    const ay = cy + dy * t;
+    const ang = Math.atan2(dy, dx);
+    const pulse = 1 + Math.sin(elapsed * 5) * 0.12;
+
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(ang);
+    ctx.scale(pulse, pulse);
+    ctx.shadowColor = 'rgba(255, 205, 70, 0.9)';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = '#ffdf5e';
+    ctx.strokeStyle = 'rgba(150, 92, 0, 0.7)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(26, 0);
+    ctx.lineTo(-14, -18);
+    ctx.lineTo(-5, 0);
+    ctx.lineTo(-14, 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function frame(now) {
@@ -439,7 +569,12 @@ function start() {
   splash.classList.add('is-hidden');
   resize();
 
-  hole.reset(world);
+  field.w = Math.round(world.w * CONFIG.world.scale);
+  field.h = Math.round(world.h * CONFIG.world.scale);
+  hole.reset(field);
+  cam.x = hole.x;
+  cam.y = hole.y;
+  cam.zoom = CONFIG.camera.maxZoom;
   buildLevel(hud.level);
   audio.chime(4);
   startLoop();
@@ -549,9 +684,13 @@ pmRestart.addEventListener('click', () => {
   hud.reset();
   celebrations.reset();   // also snaps the sky back to level 1
   particles.clear();
+  fx.clear();
   timers.clear();
   things.releaseAll();
-  hole.reset(world);
+  hole.reset(field);
+  cam.x = hole.x;
+  cam.y = hole.y;
+  cam.zoom = CONFIG.camera.maxZoom;
   levelPending = false;
   magnetT = 0;
   streakStep = 0;
@@ -576,7 +715,9 @@ window.__hh = {
   get remaining() { return activeThings(); },
   get holeR() { return hole.r; },
   get level() { return hud.level; },
-  get hole() { return { x: hole.x, y: hole.y, tx: hole.tx, ty: hole.ty, following: hole.following }; },
+  get hole() { return { x: hole.x, y: hole.y, vx: hole.vx, vy: hole.vy, touching: hole.touching }; },
+  get cam() { return { x: cam.x, y: cam.y, zoom: cam.zoom }; },
+  get field() { return { w: field.w, h: field.h, mouth: hole.mouth }; },
   get things() {
     const out = [];
     for (const th of things.items) {
@@ -584,7 +725,6 @@ window.__hh = {
     }
     return out;
   },
-  get world() { return { w: world.w, h: world.h, mouth: hole.mouth }; },
 };
 
 /* --- go --------------------------------------------------------------------- */
