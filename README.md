@@ -24,19 +24,29 @@ And around how a three-year-old actually uses a phone:
 - **No way out.** Zoom, scroll, pull-to-refresh, long-press menus and text
   selection are all disabled. The only exit is a two-second press-and-hold
 
-## Winning
+## Levels, and winning
+
+**Passing a level is the only thing that counts as a win.** Everything between
+levels is deliberately quiet, because a trophy that shows up every few pops
+stops meaning anything — which is exactly what went wrong in the first version.
 
 | When | What happens |
 | --- | --- |
-| Every pop | Pop sound, glitter, shockwave, the creature's name spoken |
-| Every 5 | A star flies up into the row, confetti, a chime, praise |
-| Every 15 | The star lands, then fireworks, cheering and a trophy |
-| Every 50 | The same but bigger — crown, brass fanfare, rainbow |
-| ~1 in 15 bubbles | A golden bubble: the big party at random |
+| Every pop | The bubble bursts: shards, a little glitter, a pop sound, and the animal's name about one time in five. That is all. |
+| Every 5 pops | A star flies up into the row. A chime, nothing more. |
+| Golden bubble (~1 in 15) | Worth **five** bubbles toward the level. A chime and extra glitter — deliberately no trophy. |
+| **5 stars = level passed** | **The win.** Fireworks, cheering, a trophy, the voice announces the new level, and the whole sky changes. |
+| Every 5th level | The same but bigger — crown, brass fanfare, rainbow. |
 
-Progress reads as a row of three stars rather than a number, because he cannot
-read yet. Nothing is saved between sessions — every session starts a fresh
-winning streak.
+A level is 25 bubbles, roughly a minute and a half of play.
+
+Progress reads as a row of five stars rather than a number, because he cannot
+read yet. And because he cannot read the level number either, **the world
+visibly becomes a different place** each level — bright day, sunset, night with
+stars and a moon, dawn, deep sea, candy, then round again. The sky crossfades
+during the fireworks so he sees it happen rather than finding it already done.
+
+Nothing is saved between sessions — every session starts again at level 1.
 
 ## Running it
 
@@ -99,8 +109,14 @@ playerName: 'Sami',           // the voice congratulates him by name
 Hearing his own name at the winning moment is the strongest reward in here.
 
 If it is too busy, lower `bubble.maxOnScreen`. If he is not landing his taps,
-raise `bubble.hitScale`. If the parties feel too rare, lower
-`celebrate.partyEvery`.
+raise `bubble.hitScale`. **If levels feel too long or too short, change
+`celebrate.bubblesPerLevel`** — that is the main dial. `celebrate.starsPerLevel`
+sets how many stars fill along the way, and `bubble.goldenWorth` is how many
+bubbles a golden one is worth.
+
+The per-level skies are the `PALETTES` array at the top of
+[`js/background.js`](js/background.js) — add one and the game simply has one
+more level before it cycles.
 
 The cast lives in [`js/creatures.js`](js/creatures.js) — one line per animal,
 with a weight and the score it unlocks at. Add, remove or reorder freely.
@@ -116,10 +132,10 @@ js/creatures.js         the cast, plus the praise phrases
 js/bubble.js            rise, sway, hit test, and the procedural glass drawing
 js/creaturePop.js       the creature leaping out and bouncing away
 js/particles.js         pooled confetti, glitter, shards, rings, fireworks
-js/celebrate.js         the four winning tiers
+js/celebrate.js         level progress and the level-up celebration
 js/hud.js               star row, trophy tally, win banner, screen flash
 js/audio.js             synthesized sound and the speaking voice
-js/background.js        sky, sun, clouds, hills
+js/background.js        the per-level skies, sun/moon, stars, clouds, hills
 js/input.js             multi-touch, drag-to-pop, gesture suppression
 sw.js                   offline cache
 tools/make-icons.mjs    regenerates the app icons (zero dependencies)

@@ -33,7 +33,8 @@ export const CONFIG = {
     maxOnScreen: 7,
     spawnInterval: 0.42,   // seconds between spawns while topping up
     hitScale: 1.35,        // touch radius vs. drawn radius. He does not need to be accurate
-    goldenChance: 1 / 15,  // golden bubble = instant big party
+    goldenChance: 1 / 15,  // how often a golden bubble appears
+    goldenWorth: 5,        // a golden bubble counts as this many bubbles toward the level
   },
 
   /* --- freed creatures ---------------------------------------------------- */
@@ -48,18 +49,20 @@ export const CONFIG = {
     fadeTime: 0.55,
   },
 
-  /* --- celebrations ------------------------------------------------------- */
+  /* --- levels and celebrations -------------------------------------------- */
+  /* The trophy is now the LEVEL, and nothing else in the game earns one.
+     Between levels the game stays deliberately quiet, so that when the
+     fireworks do arrive they mean something. */
   celebrate: {
-    starEvery: 5,          // a star + confetti shower
-    partyEvery: 15,        // fireworks, cheering, trophy
-    megaEvery: 50,         // crown, fanfare, rainbow
-    starsPerParty: 3,      // starEvery * starsPerParty should equal partyEvery
+    bubblesPerLevel: 25,   // roughly a minute and a half of play
+    starsPerLevel: 5,      // one star fills every bubblesPerLevel / starsPerLevel pops
+    megaEveryLevels: 5,    // every 5th level earns the crown and the brass fanfare
   },
 
   /* --- sound -------------------------------------------------------------- */
   audio: {
     masterVolume: 0.55,    // deliberately conservative: this is held near his ears
-    speakChance: 0.34,     // fraction of pops where the voice names the animal
+    speakChance: 0.2,      // fraction of pops where the voice names the animal
     speechRate: 0.85,      // slower than default
     speechPitch: 1.3,      // friendlier than default
     speechVolume: 1.0,
@@ -69,7 +72,7 @@ export const CONFIG = {
   /* --- particles ---------------------------------------------------------- */
   particles: {
     max: 900,              // hard cap; oldest are recycled
-    popSparkles: 16,
+    popSparkles: 9,        // kept small: a pop should feel good, not look like a win
     confettiPerShower: 90,
     fireworkSparks: 46,
   },

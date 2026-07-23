@@ -16,11 +16,13 @@ const BANNER_OUT = 0.45;
 
 export class Hud {
   constructor() {
-    this.score = 0;
-    this.stars = 0;
-    this.trophies = 0;
+    this.score = 0;          // total bubbles popped, all levels
+    this.level = 1;
+    this.levelProgress = 0;  // 0 .. CONFIG.celebrate.bubblesPerLevel
+    this.stars = 0;          // stars filled in the current level
+    this.trophies = 0;       // levels passed
 
-    this.starPop = new Array(CONFIG.celebrate.starsPerParty).fill(0);
+    this.starPop = new Array(CONFIG.celebrate.starsPerLevel).fill(0);
     this.flying = [];
 
     this.banner = null;  // { kind, t, duration }
@@ -29,6 +31,8 @@ export class Hud {
 
   reset() {
     this.score = 0;
+    this.level = 1;
+    this.levelProgress = 0;
     this.stars = 0;
     this.trophies = 0;
     this.starPop.fill(0);
@@ -45,7 +49,7 @@ export class Hud {
   }
 
   fillStar() {
-    if (this.stars < CONFIG.celebrate.starsPerParty) {
+    if (this.stars < CONFIG.celebrate.starsPerLevel) {
       this.starPop[this.stars] = 1;
       this.stars++;
     }
@@ -96,11 +100,17 @@ export class Hud {
 
   #metrics(world) {
     const s = world.h / 1000;
+    const count = CONFIG.celebrate.starsPerLevel;
+    const x = world.safe.l + 34 * s;
+    // The row has to shrink to fit however many stars a level is worth, while
+    // staying clear of the score in the opposite corner.
+    const avail = (world.w - world.safe.r - 96 * s) - x;
+    const gap = Math.min(64 * s, avail / count);
     return {
-      x: world.safe.l + 34 * s,
+      x,
       y: world.safe.t + 40 * s,
-      star: 26 * s,
-      gap: 64 * s,
+      star: Math.min(26 * s, gap * 0.44),
+      gap,
       scale: s,
     };
   }
@@ -108,7 +118,7 @@ export class Hud {
   /** Where the next star will land — the flying star aims here. */
   #slotCount(world) {
     const m = this.#metrics(world);
-    const i = Math.min(this.stars, CONFIG.celebrate.starsPerParty - 1);
+    const i = Math.min(this.stars, CONFIG.celebrate.starsPerLevel - 1);
     return { x: m.x + m.star + i * m.gap, y: m.y + m.star };
   }
 
@@ -146,7 +156,7 @@ export class Hud {
   #drawStarRow(ctx, world) {
     const m = this.#metrics(world);
 
-    for (let i = 0; i < CONFIG.celebrate.starsPerParty; i++) {
+    for (let i = 0; i < CONFIG.celebrate.starsPerLevel; i++) {
       const cx = m.x + m.star + i * m.gap;
       const cy = m.y + m.star;
       const filled = i < this.stars;
@@ -193,6 +203,11 @@ export class Hud {
 
     ctx.save();
     ctx.textBaseline = 'middle';
+    // Same treatment as the star row: bubbles drift behind all of this, and an
+    // unshadowed emoji disappears against a pale one.
+    ctx.shadowColor = 'rgba(28, 17, 69, 0.6)';
+    ctx.shadowBlur = 10 * m.scale;
+    ctx.shadowOffsetY = 2.5 * m.scale;
 
     if (this.trophies > 0) {
       ctx.textAlign = 'left';

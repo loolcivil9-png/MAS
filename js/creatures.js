@@ -55,12 +55,7 @@ export const CREATURES = [
   { glyph: '🐉', name: 'Dragon',    weight:  2, unlockAt: 30 },
 ];
 
-/** Praise for the every-5-pops moment. Short, so it never runs long. */
-export const CHEERS = [
-  'Wow!', 'Yay!', 'Nice!', 'Super!', 'Great!', 'Awesome!', 'Woohoo!', 'Amazing!',
-];
-
-/** Praise for the big party. `%s` becomes his name if one is configured. */
+/** Praise for passing a level. `%s` becomes his name if one is configured. */
 export const BIG_CHEERS = [
   'You did it%s! You win!',
   'Amazing%s! You win!',
@@ -69,7 +64,7 @@ export const BIG_CHEERS = [
   'Hooray%s! You win!',
 ];
 
-/** Praise for the mega party. */
+/** Praise for passing a milestone level. */
 export const MEGA_CHEERS = [
   'Champion%s!',
   'You are a super star%s!',

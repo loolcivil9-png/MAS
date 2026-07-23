@@ -52,7 +52,7 @@ const background = new Background();
 const particles = new Particles();
 const hud = new Hud();
 const timers = new Timers();
-const celebrations = new Celebrations({ particles, hud, timers, world });
+const celebrations = new Celebrations({ particles, hud, timers, world, background });
 
 const bubbles = new Pool(20, () => new Bubble());
 const freed = new Pool(28, () => new FreedCreature());
@@ -387,6 +387,7 @@ pmClose.addEventListener('click', closeParentMenu);
 
 pmRestart.addEventListener('click', () => {
   hud.reset();
+  celebrations.reset();   // also snaps the sky back to level 1
   particles.clear();
   timers.clear();
   bubbles.releaseAll();

@@ -1,35 +1,156 @@
 /* ---------------------------------------------------------------------------
-   The scene behind the bubbles: a sky that very slowly changes colour, a warm
-   sun glow, drifting clouds and two layers of rolling hills.
+   The scene behind the bubbles.
 
-   Deliberately calm and low-contrast. The bubbles and the celebrations are the
-   things that should grab his eye; this only has to be pleasant.
+   Each level has its own sky. He cannot read a level number, so the world
+   visibly becoming a different place is what tells him he got somewhere — day
+   gives way to sunset, then night with stars and a moon, and so on. The change
+   crossfades over a second and a half during the level-up fireworks, so he sees
+   it happen rather than finding it already done.
    --------------------------------------------------------------------------- */
 
-import { TAU, rand, lerp, hsla } from './util.js';
+import { TAU, rand, lerp, clamp, easeInOutSine, hsla } from './util.js';
 
 const CLOUD_COUNT = 7;
-const SKY_CYCLE_SECONDS = 150; // one full lap of the palette
+const STAR_COUNT = 70;
+const TRANSITION_SECONDS = 1.5;
+
+/**
+ * One sky. Colours are [hue, saturation, lightness] so they can be interpolated
+ * component by component. `sun.alpha` doubles as the moon at night — same glow,
+ * smaller and colder.
+ */
+const PALETTES = [
+  { // 1 — bright day
+    top: [198, 78, 70], mid: [193, 72, 81], bot: [45, 82, 87],
+    hillFar: [128, 44, 62], hillNear: [122, 52, 50],
+    cloud: [0, 0, 100], cloudAlpha: 0.62,
+    sun: { hue: 48, lum: 92, alpha: 0.85, size: 0.34, y: 0.17 },
+    starAlpha: 0,
+  },
+  { // 2 — sunset
+    top: [258, 52, 54], mid: [14, 86, 71], bot: [38, 96, 76],
+    hillFar: [275, 30, 48], hillNear: [268, 34, 34],
+    cloud: [20, 80, 82], cloudAlpha: 0.5,
+    sun: { hue: 24, lum: 74, alpha: 0.95, size: 0.42, y: 0.62 },
+    starAlpha: 0.25,
+  },
+  { // 3 — night
+    top: [237, 62, 16], mid: [242, 54, 28], bot: [250, 44, 40],
+    hillFar: [244, 38, 24], hillNear: [246, 42, 15],
+    cloud: [240, 40, 45], cloudAlpha: 0.34,
+    sun: { hue: 210, lum: 96, alpha: 0.7, size: 0.16, y: 0.15 },
+    starAlpha: 1,
+  },
+  { // 4 — dawn
+    top: [222, 68, 60], mid: [288, 58, 76], bot: [30, 92, 83],
+    hillFar: [168, 40, 56], hillNear: [162, 46, 42],
+    cloud: [320, 60, 88], cloudAlpha: 0.55,
+    sun: { hue: 340, lum: 86, alpha: 0.8, size: 0.36, y: 0.48 },
+    starAlpha: 0.35,
+  },
+  { // 5 — deep sea
+    top: [196, 72, 46], mid: [182, 66, 62], bot: [166, 60, 78],
+    hillFar: [176, 48, 46], hillNear: [186, 54, 32],
+    cloud: [190, 55, 88], cloudAlpha: 0.4,
+    sun: { hue: 180, lum: 92, alpha: 0.6, size: 0.40, y: 0.12 },
+    starAlpha: 0.15,
+  },
+  { // 6 — candy
+    top: [302, 72, 74], mid: [332, 84, 83], bot: [50, 92, 88],
+    hillFar: [318, 62, 76], hillNear: [340, 70, 66],
+    cloud: [0, 0, 100], cloudAlpha: 0.7,
+    sun: { hue: 56, lum: 94, alpha: 0.8, size: 0.32, y: 0.2 },
+    starAlpha: 0,
+  },
+];
+
+/** Shortest way round the colour wheel, so a crossfade never sweeps the rainbow. */
+function lerpHue(a, b, t) {
+  const d = ((b - a + 540) % 360) - 180;
+  return (a + d * t + 360) % 360;
+}
+
+const lerpHsl = (a, b, t) => [lerpHue(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+
+function lerpPalette(a, b, t) {
+  return {
+    top: lerpHsl(a.top, b.top, t),
+    mid: lerpHsl(a.mid, b.mid, t),
+    bot: lerpHsl(a.bot, b.bot, t),
+    hillFar: lerpHsl(a.hillFar, b.hillFar, t),
+    hillNear: lerpHsl(a.hillNear, b.hillNear, t),
+    cloud: lerpHsl(a.cloud, b.cloud, t),
+    cloudAlpha: lerp(a.cloudAlpha, b.cloudAlpha, t),
+    sun: {
+      hue: lerpHue(a.sun.hue, b.sun.hue, t),
+      lum: lerp(a.sun.lum, b.sun.lum, t),
+      alpha: lerp(a.sun.alpha, b.sun.alpha, t),
+      size: lerp(a.sun.size, b.sun.size, t),
+      y: lerp(a.sun.y, b.sun.y, t),
+    },
+    starAlpha: lerp(a.starAlpha, b.starAlpha, t),
+  };
+}
 
 export class Background {
   constructor() {
     this.t = 0;
+
+    this.from = PALETTES[0];
+    this.to = PALETTES[0];
+    this.blend = 1;
+
     this.clouds = [];
     for (let i = 0; i < CLOUD_COUNT; i++) {
       this.clouds.push({
-        x: rand(0, 1),          // 0..1 across the world, wraps
-        y: rand(0.06, 0.44),    // 0..1 down the world
+        x: rand(0, 1),
+        y: rand(0.06, 0.44),
         scale: rand(0.55, 1.35),
         speed: rand(0.006, 0.022),
         puffs: Math.round(rand(3, 5)),
-        alpha: rand(0.3, 0.62),
+        alpha: rand(0.55, 1),
         seed: rand(0, TAU),
+      });
+    }
+
+    this.stars = [];
+    for (let i = 0; i < STAR_COUNT; i++) {
+      this.stars.push({
+        x: rand(0, 1),
+        y: rand(0, 0.72),      // never behind the hills
+        r: rand(0.6, 2.4),
+        phase: rand(0, TAU),
+        speed: rand(0.7, 2.4),
       });
     }
   }
 
+  /** Crossfade to this level's sky. Level 1 is the first palette; then it cycles. */
+  setLevel(level) {
+    const next = PALETTES[(Math.max(1, level) - 1) % PALETTES.length];
+    if (next === this.to) return;
+    // Snapshot wherever we currently are, so a level passed mid-fade still
+    // starts its new fade from what is actually on screen.
+    this.from = this.palette();
+    this.to = next;
+    this.blend = 0;
+  }
+
+  /** Jump straight to a level with no transition — used when restarting. */
+  resetTo(level) {
+    this.to = this.from = PALETTES[(Math.max(1, level) - 1) % PALETTES.length];
+    this.blend = 1;
+  }
+
+  palette() {
+    if (this.blend >= 1) return this.to;
+    return lerpPalette(this.from, this.to, easeInOutSine(this.blend));
+  }
+
   update(dt) {
     this.t += dt;
+    if (this.blend < 1) this.blend = Math.min(1, this.blend + dt / TRANSITION_SECONDS);
+
     for (const c of this.clouds) {
       // Nearer (bigger) clouds move faster — cheap parallax.
       c.x += c.speed * c.scale * dt * 0.35;
@@ -39,51 +160,62 @@ export class Background {
 
   draw(ctx, world) {
     const { w, h } = world;
-    // Ease back and forth across the palette instead of snapping at the wrap.
-    const phase = (Math.sin((this.t / SKY_CYCLE_SECONDS) * TAU) + 1) / 2;
+    const p = this.palette();
 
-    this.#drawSky(ctx, w, h, phase);
-    this.#drawSun(ctx, w, h, phase);
-    this.#drawClouds(ctx, w, h);
-    this.#drawHills(ctx, w, h, phase);
+    this.#drawSky(ctx, w, h, p);
+    if (p.starAlpha > 0.01) this.#drawStars(ctx, w, h, p);
+    this.#drawSun(ctx, w, h, p);
+    this.#drawClouds(ctx, w, h, p);
+    this.#drawHills(ctx, w, h, p);
   }
 
-  #drawSky(ctx, w, h, phase) {
-    const topHue = lerp(198, 232, phase);      // sky blue → soft violet
-    const midHue = lerp(190, 300, phase);
-    const botHue = lerp(45, 330, phase);       // warm sand → soft pink
-
+  #drawSky(ctx, w, h, p) {
     const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0.0, hsla(topHue, 78, 70));
-    g.addColorStop(0.45, hsla(midHue, 72, 80));
-    g.addColorStop(1.0, hsla(botHue, 82, 86));
+    g.addColorStop(0.0, hsla(...p.top));
+    g.addColorStop(0.45, hsla(...p.mid));
+    g.addColorStop(1.0, hsla(...p.bot));
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
   }
 
-  #drawSun(ctx, w, h, phase) {
-    const x = w * lerp(0.22, 0.78, phase);
-    const y = h * 0.17;
-    const r = h * 0.34;
+  #drawStars(ctx, w, h, p) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of this.stars) {
+      const twinkle = 0.45 + 0.55 * (Math.sin(this.t * s.speed + s.phase) * 0.5 + 0.5);
+      ctx.fillStyle = `rgba(255, 252, 232, ${clamp(p.starAlpha * twinkle, 0, 1) * 0.9})`;
+      ctx.beginPath();
+      ctx.arc(s.x * w, s.y * h, s.r * (h / 1000) * 1.6, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  #drawSun(ctx, w, h, p) {
+    // Drifts across as the levels advance, so consecutive skies do not look
+    // like the same picture recoloured.
+    const x = w * (0.28 + 0.44 * ((this.t * 0.004) % 1));
+    const y = h * p.sun.y;
+    const r = h * p.sun.size;
 
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, 'rgba(255, 250, 214, 0.85)');
-    g.addColorStop(0.35, 'rgba(255, 238, 170, 0.34)');
-    g.addColorStop(1, 'rgba(255, 232, 160, 0)');
+    g.addColorStop(0, hsla(p.sun.hue, 100, p.sun.lum, p.sun.alpha));
+    g.addColorStop(0.34, hsla(p.sun.hue, 100, p.sun.lum - 8, p.sun.alpha * 0.38));
+    g.addColorStop(1, hsla(p.sun.hue, 100, p.sun.lum - 12, 0));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, TAU);
     ctx.fill();
   }
 
-  #drawClouds(ctx, w, h) {
+  #drawClouds(ctx, w, h, p) {
     ctx.save();
     for (const c of this.clouds) {
       const cx = c.x * w * 1.7 - w * 0.35;
       const cy = c.y * h;
       const base = h * 0.055 * c.scale;
 
-      ctx.fillStyle = `rgba(255,255,255,${c.alpha})`;
+      ctx.fillStyle = hsla(p.cloud[0], p.cloud[1], p.cloud[2], c.alpha * p.cloudAlpha);
       ctx.beginPath();
       for (let i = 0; i < c.puffs; i++) {
         const spread = (i - (c.puffs - 1) / 2) * base * 1.05;
@@ -98,11 +230,10 @@ export class Background {
     ctx.restore();
   }
 
-  #drawHills(ctx, w, h, phase) {
-    // Far hills, then near hills — both short enough that bubbles rising from
-    // the bottom edge are visible immediately.
-    this.#hill(ctx, w, h, h * 0.90, h * 0.030, 1.7, 0.0, hsla(lerp(128, 158, phase), 44, 62, 0.85));
-    this.#hill(ctx, w, h, h * 0.955, h * 0.024, 2.6, 1.3, hsla(lerp(122, 150, phase), 52, 50, 0.95));
+  #drawHills(ctx, w, h, p) {
+    // Short enough that bubbles rising from the bottom edge are visible at once.
+    this.#hill(ctx, w, h, h * 0.90, h * 0.030, 1.7, 0.0, hsla(...p.hillFar, 0.9));
+    this.#hill(ctx, w, h, h * 0.955, h * 0.024, 2.6, 1.3, hsla(...p.hillNear, 0.97));
   }
 
   #hill(ctx, w, h, baseY, amp, freq, offset, fill) {
