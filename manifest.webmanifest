@@ -2,7 +2,6 @@
   "name": "Bubble Zoo",
   "short_name": "Bubble Zoo",
   "description": "Pop bubbles, meet animals and dinosaurs, and win every single time. A gentle endless game for very young children.",
-  "id": "/bubble-zoo/",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",

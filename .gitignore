@@ -1,0 +1,11 @@
+# Local Claude Code settings (machine-specific)
+.claude/settings.local.json
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Node, if it ever gets used
+node_modules/
+npm-debug.log*
