@@ -19,6 +19,7 @@ import { CONFIG } from './config.js';
 import { audio } from './audio.js';
 import { rand, pick } from './util.js';
 import { BIG_CHEERS, MEGA_CHEERS } from './creatures.js';
+import { met, markDirty, flushSave } from './save.js';
 
 export class Celebrations {
   constructor({ particles, hud, timers, world, background }) {
@@ -39,30 +40,71 @@ export class Celebrations {
     this.background?.resetTo(1);
   }
 
-  /** Called for every popped bubble. */
-  onPop(bubble) {
+  /**
+   * Called for every popped bubble.
+   * @param {boolean} [muteCall] a rainbow chain pops half a dozen bubbles in
+   *   under a second — only the first couple get to speak up.
+   */
+  onPop(bubble, muteCall = false) {
     const { particles, hud } = this;
-    const { x, y, r, hue, creature, golden } = bubble;
+    const { x, y, r, hue, creature, special } = bubble;
 
     // --- the pop itself: satisfying, but not a celebration -------------------
     particles.bubbleShards(x, y, r, hue);
     particles.sparkleBurst(x, y, hue);
     audio.pop(r);
 
-    if (Math.random() < CONFIG.audio.speakChance) audio.creatureSound(creature.name);
+    // The animal answers most pops with its own call; the voice names it on
+    // some of the rest. Never both on one pop — a woof that then announces
+    // "Dog" is a toy explaining its own joke.
+    let called = false;
+    if (!muteCall && CONFIG.animalSounds.enabled && Math.random() < CONFIG.animalSounds.chance) {
+      called = audio.call(creature.call);
+    }
+    if (!called && !muteCall && Math.random() < CONFIG.audio.speakChance) {
+      audio.creatureSound(creature.name);
+    }
 
     hud.score++;
+    markDirty();
 
-    // --- golden bubbles are a shortcut, not a prize --------------------------
+    if (!met.has(creature.name)) this.#firstMeet(creature, x, y, hue);
+
+    // --- special bubbles are a shortcut, not a prize --------------------------
     let worth = 1;
-    if (golden) {
+    if (special === 'golden') {
       worth = CONFIG.bubble.goldenWorth;
       particles.sparkleBurst(x, y, 44, 26);
       particles.ringWave(x, y, 44, r * 0.6, r * 3, 0.5);
       audio.chime(4);
+    } else if (special === 'rainbow') {
+      // Worth one itself — its real prize is the whole screen popping after
+      // it, each of those counting normally. main.js runs that chain.
+      particles.sparkleBurst(x, y, hue, 26);
+      particles.ringWave(x, y, hue, r * 0.6, r * 4, 0.7);
     }
 
     this.#advance(worth, x, y);
+  }
+
+  /**
+   * The first time he ever pops this creature: a small hello, sized to never
+   * compete with a level-up. Over weeks, as the long-tail creatures unlock,
+   * these become rare little events worth coming back for.
+   */
+  #firstMeet(creature, x, y, hue) {
+    met.add(creature.name);
+    markDirty();
+    flushSave();   // a new friend is never worth losing to the write throttle
+
+    const rare = creature.unlockAt >= 25;
+    this.particles.ringWave(x, y, hue, 30, rare ? 320 : 240, 0.6);
+    this.particles.sparkleBurst(x, y, hue, 16);
+    audio.sparkle(4);
+    if (rare) this.hud.showFlash(0.7, { rainbow: true });
+
+    const name = creature.name.toLowerCase();
+    this.timers.after(0.2, () => audio.speak(`A ${name}! Hello, ${name}!`, { interrupt: rare }));
   }
 
   /** He touched empty screen. Answer him anyway — no touch is ever ignored. */
@@ -120,6 +162,8 @@ export class Celebrations {
     hud.levelProgress = 0;
     hud.clearStars();
     this.starsScheduled = 0;
+    markDirty();
+    flushSave();   // a won level is never worth losing to the write throttle
 
     // The sky becomes somewhere new. He cannot read the level number, so this
     // is what actually tells him he moved on.

@@ -8,7 +8,7 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '1.2.0',
+  version: '1.3.0',
 
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Bubble Zoo". */
@@ -48,6 +48,8 @@ export const CONFIG = {
     hitScale: 1.35,        // touch radius vs. drawn radius. He does not need to be accurate
     goldenChance: 1 / 15,  // how often a golden bubble appears
     goldenWorth: 5,        // a golden bubble counts as this many bubbles toward the level
+    rainbowChance: 1 / 45, // how often a rainbow bubble appears (pops the whole screen)
+    rainbowUnlockPops: 40, // no rainbows until he has popped this many, ever
   },
 
   /* --- freed creatures ---------------------------------------------------- */
@@ -70,6 +72,30 @@ export const CONFIG = {
     bubblesPerLevel: 25,   // roughly a minute and a half of play
     starsPerLevel: 5,      // one star fills every bubblesPerLevel / starsPerLevel pops
     megaEveryLevels: 5,    // every 5th level earns the crown and the brass fanfare
+  },
+
+  /* --- animal calls -------------------------------------------------------- */
+  /* Each creature has a synthesized call — a woof, a moo, a roar. Played on
+     most pops; the speaking voice covers the rest, never both on one pop. */
+  animalSounds: {
+    enabled: true,
+    chance: 0.85,          // fraction of pops that play the animal's call
+  },
+
+  /* --- surprises ------------------------------------------------------------ */
+  /* Every so often something lovely just crosses the sky — butterflies, a
+     rocket, balloons. Purely a spectacle: nothing to learn, nothing to tap. */
+  surprise: {
+    minPopsBetween: 35,
+    maxPopsBetween: 70,
+  },
+
+  /* --- saving --------------------------------------------------------------- */
+  /* His zoo remembers him between sessions: total pops, level, trophies and
+     which animals he has met. "Start over" in the grown-ups menu wipes it. */
+  save: {
+    key: 'bubble-zoo-save',
+    throttleSeconds: 3,    // at most one write this often (plus key moments)
   },
 
   /* --- sound -------------------------------------------------------------- */

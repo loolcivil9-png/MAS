@@ -17,7 +17,7 @@
 // Keep in step with CONFIG.version in js/config.js. Changing it makes the new
 // service worker install, drop the old cache, and take over — which is what
 // makes a freshly deployed version actually show up on the phone.
-const CACHE = 'bubble-zoo-1.2.0';
+const CACHE = 'bubble-zoo-1.3.0';
 
 // How long to wait for the network before falling back to the cached copy.
 const NETWORK_TIMEOUT = 2500;
@@ -39,6 +39,8 @@ const PRECACHE = [
   './js/celebrate.js',
   './js/audio.js',
   './js/input.js',
+  './js/save.js',
+  './js/surprise.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',

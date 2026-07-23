@@ -21,6 +21,7 @@ const TRANSITION_SECONDS = 1.5;
  */
 const PALETTES = [
   { // 1 — bright day
+    theme: 'day',
     top: [198, 78, 70], mid: [193, 72, 81], bot: [45, 82, 87],
     hillFar: [128, 44, 62], hillNear: [122, 52, 50],
     cloud: [0, 0, 100], cloudAlpha: 0.62,
@@ -28,6 +29,7 @@ const PALETTES = [
     starAlpha: 0,
   },
   { // 2 — sunset
+    theme: 'sunset',
     top: [258, 52, 54], mid: [14, 86, 71], bot: [38, 96, 76],
     hillFar: [275, 30, 48], hillNear: [268, 34, 34],
     cloud: [20, 80, 82], cloudAlpha: 0.5,
@@ -35,6 +37,7 @@ const PALETTES = [
     starAlpha: 0.25,
   },
   { // 3 — night
+    theme: 'night',
     top: [237, 62, 16], mid: [242, 54, 28], bot: [250, 44, 40],
     hillFar: [244, 38, 24], hillNear: [246, 42, 15],
     cloud: [240, 40, 45], cloudAlpha: 0.34,
@@ -42,6 +45,7 @@ const PALETTES = [
     starAlpha: 1,
   },
   { // 4 — dawn
+    theme: 'day',
     top: [222, 68, 60], mid: [288, 58, 76], bot: [30, 92, 83],
     hillFar: [168, 40, 56], hillNear: [162, 46, 42],
     cloud: [320, 60, 88], cloudAlpha: 0.55,
@@ -49,6 +53,7 @@ const PALETTES = [
     starAlpha: 0.35,
   },
   { // 5 — deep sea
+    theme: 'sea',
     top: [196, 72, 46], mid: [182, 66, 62], bot: [166, 60, 78],
     hillFar: [176, 48, 46], hillNear: [186, 54, 32],
     cloud: [190, 55, 88], cloudAlpha: 0.4,
@@ -56,10 +61,35 @@ const PALETTES = [
     starAlpha: 0.15,
   },
   { // 6 — candy
+    theme: 'candy',
     top: [302, 72, 74], mid: [332, 84, 83], bot: [50, 92, 88],
     hillFar: [318, 62, 76], hillNear: [340, 70, 66],
     cloud: [0, 0, 100], cloudAlpha: 0.7,
     sun: { hue: 56, lum: 94, alpha: 0.8, size: 0.32, y: 0.2 },
+    starAlpha: 0,
+  },
+  { // 7 — outer space
+    theme: 'space',
+    top: [252, 62, 8], mid: [258, 56, 15], bot: [266, 50, 24],
+    hillFar: [256, 40, 20], hillNear: [260, 44, 12],
+    cloud: [255, 35, 42], cloudAlpha: 0.22,
+    sun: { hue: 200, lum: 86, alpha: 0.55, size: 0.24, y: 0.2 },
+    starAlpha: 1,
+  },
+  { // 8 — snow
+    theme: 'snow',
+    top: [205, 48, 76], mid: [200, 42, 85], bot: [195, 32, 92],
+    hillFar: [205, 26, 86], hillNear: [210, 30, 78],
+    cloud: [0, 0, 100], cloudAlpha: 0.8,
+    sun: { hue: 55, lum: 96, alpha: 0.5, size: 0.3, y: 0.17 },
+    starAlpha: 0,
+  },
+  { // 9 — jungle
+    theme: 'jungle',
+    top: [150, 48, 38], mid: [122, 52, 52], bot: [78, 62, 68],
+    hillFar: [132, 55, 27], hillNear: [136, 60, 17],
+    cloud: [100, 30, 85], cloudAlpha: 0.45,
+    sun: { hue: 48, lum: 90, alpha: 0.75, size: 0.3, y: 0.14 },
     starAlpha: 0,
   },
 ];
@@ -141,6 +171,10 @@ export class Background {
     this.to = this.from = PALETTES[(Math.max(1, level) - 1) % PALETTES.length];
     this.blend = 1;
   }
+
+  /** The theme tag of the sky being shown (or faded toward) — biases which
+      creatures appear, so the sky change means something. */
+  get theme() { return this.to.theme; }
 
   palette() {
     if (this.blend >= 1) return this.to;

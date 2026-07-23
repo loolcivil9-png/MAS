@@ -16,17 +16,24 @@ const INTRO_TIME = 0.4; // seconds for an on-screen bubble to swell into view
 export class Bubble {
   constructor() {
     this.active = false;
+    this.special = null;   // null | 'golden' | 'rainbow'
   }
 
+  /** Kept so everything written against the old boolean still reads naturally. */
+  get golden() { return this.special === 'golden'; }
+
   /**
-   * @param {{place?: 'below' | 'anywhere' | 'low'}} [opts]
-   *   `below`    climbs into view from off the bottom edge (the normal case)
-   *   `anywhere` already on screen — used for the opening screenful, so the
-   *              game never starts on an empty sky
-   *   `low`      already on screen but near the bottom, as though it had just
-   *              risen in. Used to refill in a hurry when he clears the screen.
+   * @param {{place?: 'below' | 'anywhere' | 'low', theme?: string, allowRainbow?: boolean}} [opts]
+   *   `place: below`    climbs into view from off the bottom edge (the normal case)
+   *   `place: anywhere` already on screen — used for the opening screenful, so
+   *                     the game never starts on an empty sky
+   *   `place: low`      already on screen but near the bottom, as though it had
+   *                     just risen in. Used to refill when he clears the screen.
+   *   `theme`           the current sky's theme, which biases which creatures appear
+   *   `allowRainbow`    the spawner grants this only once he has popped enough
+   *                     and there is no rainbow already on screen
    */
-  spawn(world, score, { place = 'below' } = {}) {
+  spawn(world, score, { place = 'below', theme = 'day', allowRainbow = false } = {}) {
     const B = CONFIG.bubble;
 
     this.active = true;
@@ -46,9 +53,11 @@ export class Bubble {
     this.phase = rand(0, TAU);
     this.t = 0;
 
-    this.golden = chance(B.goldenChance);
-    this.hue = this.golden ? GOLD_HUE : rand(0, 360);
-    this.creature = pickCreature(score);
+    this.special = allowRainbow && chance(B.rainbowChance) ? 'rainbow'
+      : chance(B.goldenChance) ? 'golden'
+      : null;
+    this.hue = this.special === 'golden' ? GOLD_HUE : rand(0, 360);
+    this.creature = pickCreature(score, theme);
 
     // A slow tilt so the creature inside looks like it is floating, not pasted on.
     this.tilt = rand(-0.18, 0.18);
@@ -101,7 +110,10 @@ export class Bubble {
   }
 
   draw(ctx) {
-    const { x, y, r, hue } = this;
+    const { x, y, r } = this;
+    // A rainbow bubble's colour never sits still — that alone marks it as
+    // something new before the shimmer even registers.
+    const hue = this.special === 'rainbow' ? (this.hue + this.t * 140) % 360 : this.hue;
     const wobble = Math.sin(this.t * this.tiltSpeed * TAU + this.phase);
 
     ctx.save();
@@ -176,13 +188,14 @@ export class Bubble {
     ctx.fillStyle = 'rgba(255,255,255,0.38)';
     ctx.fill();
 
-    if (this.golden) this.#drawGoldShimmer(ctx);
+    if (this.special === 'golden') this.#drawShimmer(ctx, hsla(GOLD_HUE, 100, 61, 1), 4);
+    else if (this.special === 'rainbow') this.#drawShimmer(ctx, hsla(hue, 100, 66, 1), 6);
 
     ctx.restore();
   }
 
-  /** Golden bubbles announce themselves: a breathing halo plus orbiting twinkles. */
-  #drawGoldShimmer(ctx) {
+  /** Special bubbles announce themselves: a breathing halo plus orbiting twinkles. */
+  #drawShimmer(ctx, haloColor, twinkles) {
     const { x, y, r } = this;
     const pulse = (Math.sin(this.t * 4.2) + 1) / 2;
 
@@ -190,16 +203,18 @@ export class Bubble {
     ctx.globalCompositeOperation = 'lighter';
 
     const halo = ctx.createRadialGradient(x, y, r * 0.7, x, y, r * 1.28);
-    halo.addColorStop(0, `rgba(255, 216, 96, ${0.10 + pulse * 0.16})`);
-    halo.addColorStop(1, 'rgba(255, 200, 60, 0)');
+    ctx.globalAlpha = 0.10 + pulse * 0.16;
+    halo.addColorStop(0, haloColor);
+    halo.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = halo;
     ctx.beginPath();
     ctx.arc(x, y, r * 1.28, 0, TAU);
     ctx.fill();
+    ctx.globalAlpha = 1;
 
     ctx.fillStyle = `rgba(255, 250, 205, ${0.55 + pulse * 0.4})`;
-    for (let i = 0; i < 4; i++) {
-      const a = this.t * 1.15 + (i / 4) * TAU;
+    for (let i = 0; i < twinkles; i++) {
+      const a = this.t * 1.15 + (i / twinkles) * TAU;
       const tx = x + Math.cos(a) * r * 0.94;
       const ty = y + Math.sin(a) * r * 0.94;
       const s = r * (0.05 + 0.035 * Math.abs(Math.sin(this.t * 5 + i)));

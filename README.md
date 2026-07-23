@@ -1,8 +1,9 @@
 # Bubble Zoo
 
 An endless bubble-popping game for a three-year-old. Bubbles float up carrying
-animals and dinosaurs; touching one pops it, the creature leaps out, and
-something good happens every single time.
+animals and dinosaurs; touching one pops it, the creature leaps out **with its
+own sound** — a woof, a moo, a roar — and something good happens every single
+time.
 
 Plain HTML, CSS and JavaScript. No framework, no build step, no dependencies,
 no asset files — the sounds are generated in code and the creatures are emoji.
@@ -32,9 +33,12 @@ stops meaning anything — which is exactly what went wrong in the first version
 
 | When | What happens |
 | --- | --- |
-| Every pop | The bubble bursts: shards, a little glitter, a pop sound, and the animal's name about one time in five. That is all. |
+| Every pop | The bubble bursts: shards, a little glitter, a pop sound, and the animal's own call — a woof, a quack, a roar. The voice names the animal on some of the quieter pops. That is all. |
 | Every 5 pops | A star flies up into the row. A chime, nothing more. |
 | Golden bubble (~1 in 15) | Worth **five** bubbles toward the level. A chime and extra glitter — deliberately no trophy. |
+| Rainbow bubble (~1 in 45, after 40 lifetime pops) | Its colour never sits still. Popping it **pops every bubble on screen**, rippling outward from his finger, each one counting normally. |
+| First time meeting an animal | A ring of sparkles and a hello by name ("A dog! Hello, dog!"). Small on purpose — it must never compete with a level-up. |
+| Every so often (~every 35–70 pops) | A surprise crosses the sky: a flock of butterflies, a rocket, balloons, a V of birds. Pure spectacle — drawn behind the bubbles, nothing to tap, nothing to learn. |
 | **5 stars = level passed** | **The win.** Fireworks, cheering, a trophy, the voice announces the new level, and the whole sky changes. |
 | Every 5th level | The same but bigger — crown, brass fanfare, rainbow. |
 
@@ -43,10 +47,32 @@ A level is 25 bubbles, roughly a minute and a half of play.
 Progress reads as a row of five stars rather than a number, because he cannot
 read yet. And because he cannot read the level number either, **the world
 visibly becomes a different place** each level — bright day, sunset, night with
-stars and a moon, dawn, deep sea, candy, then round again. The sky crossfades
-during the fireworks so he sees it happen rather than finding it already done.
+stars and a moon, dawn, deep sea, candy, outer space, snow, jungle, then round
+again. The sky crossfades during the fireworks so he sees it happen rather than
+finding it already done.
 
-Nothing is saved between sessions — every session starts again at level 1.
+**The sky also decides who comes to visit**: the night level fills with owls
+and foxes, the sea level with dolphins, whales and octopuses, the jungle with
+monkeys, tigers and parrots. Each palette in `background.js` carries a theme
+tag, and creatures in `creatures.js` can weight themselves toward a theme.
+
+## It remembers him
+
+Total pops, the level he reached, his trophies and **which animals he has met**
+are saved on the device (localStorage) and restored next time. That changes
+the shape of the game over weeks:
+
+- Rare creatures stay unlocked once earned, and the rarest — koala, parrot,
+  whale, flamingo, camel, hedgehog, squirrel, peacock, seal, baby dragon —
+  need days of accumulated popping to appear at all. Meeting a new friend
+  stays a real event long after the first session.
+- Progress *within* a level is deliberately **not** saved. Every session opens
+  on a fresh level at zero stars, so a win is always at most a couple of
+  minutes away, and the star row is always honest.
+- **Start over** in the grown-ups menu wipes the save completely. The menu
+  also shows the lifetime stats: bubbles popped, levels won, animals met.
+- If storage is unavailable (private browsing, quota), the game silently plays
+  session-only — exactly as it did before saving existed.
 
 ## Running it
 
@@ -96,8 +122,10 @@ work with no signal at all.
 
 Everything worth changing is in [`js/config.js`](js/config.js) — bubble size and
 speed, how many are on screen, how generous the touch radius is, the celebration
-thresholds, the odds of a golden bubble, the volume and how often the voice
-speaks.
+thresholds, the odds of a golden or rainbow bubble, how often the animals call
+out (`animalSounds.chance`), how often a surprise crosses the sky
+(`surprise.minPopsBetween` / `maxPopsBetween`), the volume and how often the
+voice speaks.
 
 Two changes worth making first:
 
@@ -135,7 +163,9 @@ The per-level skies are the `PALETTES` array at the top of
 more level before it cycles.
 
 The cast lives in [`js/creatures.js`](js/creatures.js) — one line per animal,
-with a weight and the score it unlocks at. Add, remove or reorder freely.
+with a weight, the lifetime pop count it unlocks at, which synthesized call it
+makes (`call`, matching a recipe in `js/audio.js`), and optional per-sky
+weighting (`themes`). Add, remove or reorder freely.
 
 ## What is where
 
@@ -148,10 +178,12 @@ js/creatures.js         the cast, plus the praise phrases
 js/bubble.js            rise, sway, hit test, and the procedural glass drawing
 js/creaturePop.js       the creature leaping out and bouncing away
 js/particles.js         pooled confetti, glitter, shards, rings, fireworks
-js/celebrate.js         level progress and the level-up celebration
+js/celebrate.js         level progress, first-meet hellos, the level-up celebration
 js/hud.js               star row, trophy tally, win banner, screen flash
-js/audio.js             synthesized sound and the speaking voice
-js/background.js        the per-level skies, sun/moon, stars, clouds, hills
+js/audio.js             synthesized sound, the animal calls and the speaking voice
+js/background.js        the per-level skies (with theme tags), sun/moon, stars, clouds, hills
+js/surprise.js          the butterflies / rocket / balloons / birds flybys
+js/save.js              what the game remembers between sessions
 js/input.js             multi-touch, drag-to-pop, gesture suppression
 sw.js                   offline cache
 tools/make-icons.mjs    regenerates the app icons (zero dependencies)
@@ -164,10 +196,11 @@ tools/make-icons.mjs    regenerates the app icons (zero dependencies)
   changing one field per creature.
 - **The voice is the phone's own text-to-speech**, so its quality varies by
   device. It can be switched off entirely in the grown-ups menu.
-- **No real animal sounds yet.** Synthesis cannot make a convincing lion roar,
-  and a real roar is a much bigger payoff for a small child than anything
-  generated. `audio.js` already prefers a recorded sample over the voice when
-  one is registered (`audio.samples`), so adding them is a data change rather
-  than a rewrite.
+- **The animal calls are synthesized approximations** — a cheerful cartoon woof
+  rather than a recording of a dog. They are built from the same Web Audio
+  engine as everything else, so they cost nothing to download and work
+  offline. `audio.js` still prefers a real recorded sample whenever one is
+  registered (`audio.samples`), so upgrading any call to a recording remains a
+  data change rather than a rewrite.
 - **Fullscreen does not exist on iPhone Safari.** Installing to the home screen
   achieves the same thing there.

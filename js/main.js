@@ -15,6 +15,9 @@ import { Hud } from './hud.js';
 import { Celebrations } from './celebrate.js';
 import { audio } from './audio.js';
 import { attachInput, suppressBrowserGestures } from './input.js';
+import { Surprises } from './surprise.js';
+import { CREATURES } from './creatures.js';
+import { met, loadSave, initSave, flushSave, clearSave } from './save.js';
 
 /* --- elements --------------------------------------------------------------- */
 
@@ -54,9 +57,23 @@ const particles = new Particles();
 const hud = new Hud();
 const timers = new Timers();
 const celebrations = new Celebrations({ particles, hud, timers, world, background });
+const surprises = new Surprises(particles);
 
 const bubbles = new Pool(20, () => new Bubble());
 const freed = new Pool(28, () => new FreedCreature());
+
+/* --- the zoo remembers him --------------------------------------------------- */
+
+// Restore before anything spawns, so rare creatures he has already earned are
+// unlocked from the first bubble and the sky opens on the level he reached.
+const restored = loadSave();
+if (restored) {
+  hud.score = restored.totalPops;
+  hud.level = restored.level;
+  hud.trophies = restored.trophies;
+  background.resetTo(hud.level);
+}
+initSave(() => ({ totalPops: hud.score, level: hud.level, trophies: hud.trophies }));
 
 let running = false;
 let started = false;
@@ -162,10 +179,38 @@ function onPoint(x, y, kind) {
   }
 }
 
-function popBubble(b) {
-  celebrations.onPop(b);
+function popBubble(b, muteCall = false) {
+  celebrations.onPop(b, muteCall);
   const creature = freed.acquire();
   creature.spawn(b.x, b.y, b.creature, b.r * 1.12);
+  if (b.special === 'rainbow') rainbowBurst(b);
+  surprises.onPop(!!hud.banner);
+}
+
+/**
+ * The rainbow bubble's prize: every other bubble on screen pops itself, rippling
+ * outward from where he touched. Each chained pop goes through the normal path,
+ * so each one scores, flings its creature and plays its sound — and any bubble
+ * he pops himself mid-chain simply beats the ripple to it.
+ */
+function rainbowBurst(src) {
+  hud.showFlash(0.9, { rainbow: true });
+  audio.chime(7);
+
+  const others = [];
+  for (const b of bubbles.items) if (b.active) others.push(b);
+  others.sort(
+    (a, b) => Math.hypot(a.x - src.x, a.y - src.y) - Math.hypot(b.x - src.x, b.y - src.y),
+  );
+  others.forEach((b, i) => {
+    timers.after(0.1 * (i + 1), () => {
+      if (!b.active) return;
+      b.active = false;
+      // Half a dozen animal calls in one second would be a wall of noise;
+      // after the first two, the chain keeps just the pops.
+      popBubble(b, i >= 2);
+    });
+  });
 }
 
 attachInput(canvas, toWorld, onPoint);
@@ -209,14 +254,28 @@ function smallestGap(bubble) {
   return min;
 }
 
+/** Is a rainbow bubble already live? Only one is allowed at a time. */
+function rainbowOnScreen() {
+  for (const b of bubbles.items) {
+    if (b.active && b.special === 'rainbow') return true;
+  }
+  return false;
+}
+
 function spawnBubble(place = 'below') {
   const b = bubbles.acquire();
+
+  const opts = {
+    place,
+    theme: background.theme,
+    allowRainbow: hud.score >= CONFIG.bubble.rainbowUnlockPops && !rainbowOnScreen(),
+  };
 
   // Re-roll a few times to avoid two of the same animal on screen at once.
   // Early on only a dozen creatures have unlocked, so collisions are common and
   // a screen with two identical dogs on it looks like a bug.
   for (let attempt = 0; attempt < 8; attempt++) {
-    b.spawn(world, hud.score, { place });
+    b.spawn(world, hud.score, opts);
     if (!isDuplicate(b)) break;
   }
 
@@ -329,6 +388,7 @@ function separateBubbles(dt) {
 function update(dt) {
   timers.update(dt);
   background.update(dt);
+  surprises.update(dt, world);
   manageBubbles(dt);
 
   for (const b of bubbles.items) if (b.active) b.update(dt, world);
@@ -343,6 +403,7 @@ function render() {
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
   background.draw(ctx, world);
+  surprises.draw(ctx);   // behind the bubbles: lovely to watch, nothing to tap
   hud.drawFlash(ctx, world);
 
   for (const b of bubbles.items) if (b.active) b.draw(ctx);
@@ -416,6 +477,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     stopLoop();
     audio.suspend();
+    flushSave();          // the realistic exit is the phone being taken away
   } else if (started) {
     audio.resume();
     requestWakeLock();
@@ -470,8 +532,9 @@ function openParentMenu() {
   pmVolume.value = String(Math.round(CONFIG.audio.masterVolume * 100));
   pmVoice.checked = CONFIG.audio.voiceEnabled;
   pmStat.textContent =
-    `Popped ${hud.score} bubble${hud.score === 1 ? '' : 's'} and won ` +
-    `${hud.trophies} time${hud.trophies === 1 ? '' : 's'} this session.`;
+    `Popped ${hud.score} bubble${hud.score === 1 ? '' : 's'}, won ` +
+    `${hud.trophies} time${hud.trophies === 1 ? '' : 's'}, and met ` +
+    `${met.size} of ${CREATURES.length} animals.`;
   parentMenu.hidden = false;
 }
 
@@ -490,6 +553,7 @@ pmVoice.addEventListener('change', () => {
 pmClose.addEventListener('click', closeParentMenu);
 
 pmRestart.addEventListener('click', () => {
+  clearSave();            // forget everything, not just this session
   hud.reset();
   celebrations.reset();   // also snaps the sky back to level 1
   particles.clear();
