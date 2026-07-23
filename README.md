@@ -1,10 +1,11 @@
 # Hungry Hole
 
 An eat-everything game for a three-year-old, in the spirit of hole.io but with
-all the sharp edges filed off. He drags a friendly, googly-eyed hole around a
-cheerful little world; anything small enough falls in with a satisfying gulp,
-the hole grows, and bigger and bigger things start to fit — until the whole
-world, castle and all, has gone down the hatch. Then a brand-new world arrives.
+all the sharp edges filed off. He steers a friendly, googly-eyed hole through
+**one big, organized city**; anything small enough falls in with a satisfying
+gulp, the hole grows, and bigger and bigger things start to fit — until the
+whole city, stadium and all, has gone down the hatch. Then a brand-new city
+grows back.
 
 Plain HTML, CSS and JavaScript. No framework, no build step, no dependencies,
 no asset files — the sounds are generated in code and the world is emoji.
@@ -15,8 +16,8 @@ The whole folder is a deployable static site.
 - No timer, no lives, no enemies, no other holes, no "game over"
 - A thing that is still too big just wobbles with a friendly *boing* and a
   sparkle — a promise, not a punishment. He will be back for it
-- Nothing ever gets harder. The hole only ever grows, and every level ends in
-  a win by construction
+- Nothing ever gets harder. The hole only ever grows, and the city always
+  ends up eaten — by construction
 - Every touch is answered: the hole turns and comes, and the spot sparkles
 
 And around how a three-year-old actually uses a phone:
@@ -31,66 +32,81 @@ And around how a three-year-old actually uses a phone:
 - **No way out.** Zoom, scroll, pull-to-refresh, long-press menus and text
   selection are all disabled. The only exit is a two-second press-and-hold
 
-## A world bigger than the screen
+## The city — one map, no levels
 
-The world is a little over **two screens wide and two screens tall**, with
-everything spread comfortably across it. A camera rides on the hole with a
-touch of lookahead, and **zooms out as the hole grows** — the world visibly
-"gets smaller" around it, which is the whole fantasy. Themed ground markings
-scroll underfoot so movement always reads, a soft border marks the edge of the
-world, and when only a few things are left, **golden arrows at the screen edge
-point toward any stragglers** — the last strawberry can never become a
-dead end.
+There are no levels. There is **one city**, several screens big, laid out the
+way a real little city is — and the layout itself is the difficulty curve,
+because the small things live at the bottom and the big things at the top:
 
-## How a level works
+| District | What lives there |
+| --- | --- |
+| **The park** (bottom) | Flower beds in rows, daisies, balls, birds, park chairs, trees, a fountain — and the small hole starts here |
+| **The market** | Crates and baskets by the rank, boxes of apples, oranges and strawberries, trolleys, scooters, market cats |
+| **The little houses** | A tidy grid of homes with garden trees, postboxes and dogs |
+| **The busy streets** | Ranks of parked cars and taxis, buses, trucks, a fire engine, traffic lights along the road, a huddle of striped barriers |
+| **Downtown** (top) | A block of big buildings — offices, the shop, the bank, the hotel, the church, the school |
+| **The stadium** | The one giant landmark at the very top. The last bite of all. |
 
-A level is one whole world — about 44 things in five sizes scattered across
-it, from strawberries and flowers up through teddies, cars and houses to one
-giant landmark. The hole starts small enough that only the tiny things fit.
+Things come in **armies** — a bed of seven flowers, a row of four parked
+cars, a block of six buildings — because a line of the same thing begs to be
+hoovered up in one glorious pass. Real roads with dashed centre lines run
+between the districts, a park lawn tints the bottom of the map, and the whole
+city is generated from a seed, so it can be saved and resumed exactly.
+
+A camera rides on the hole with a touch of lookahead and **zooms out as the
+hole grows** — the city visibly "gets smaller" around it, which is the whole
+fantasy. And whenever nothing on screen fits his mouth, or only a few things
+remain anywhere, **golden arrows at the screen edge point the way** — a city
+this big must never become a dead end.
+
+## How it plays
+
+About 110 things in seven sizes fill the city, flowers to stadium. The hole
+starts small enough that only the very tiniest things fit — and **each new
+size takes a satisfying while to reach**: growth shares scale with
+size^1.3, so a whole flower-bed of tiny things is needed before boxes fit,
+a market's worth of boxes before cars fit, and so on up to the stadium.
 
 | When | What happens |
 | --- | --- |
-| Every gulp | The thing spirals down the hole with a pop-pitched gulp, sparkles fly, the hole squashes happily and grows a little. Some things have their own voice — cars vroom, owls hoot, rockets whoosh — and the speaking voice names things now and then. |
-| Quick gulps in a row | Each one climbs a little melody a step higher. Any pause resets it. |
+| Every gulp | The thing spirals down the hole with a pop-pitched gulp, sparkles fly, the hole squashes happily and grows a little. Some things have their own voice — cars vroom, cats meow, the fountain splashes — and the speaking voice names things now and then. |
+| Quick gulps in a row | Each one climbs a little melody a step higher. Any pause resets it. Perfect over a flower bed. |
 | Something still too big | A friendly wobble and a *boing*. Never a penalty. |
-| Every fifth of the world eaten | A star flies up into the row. A chime, nothing more. |
-| The golden thing | An extra-big growth spurt. A chime and glitter — deliberately no trophy. |
-| The magnet thing (from level 2) | For five seconds everything nearby that fits comes sliding in by itself. A superpower, strictly positive. |
-| Runners | A few little creatures (ladybugs, chicks, crabs, aliens…) scoot away from the hole. They are always slower than it — a funny chase, never a frustrating one. |
-| First time eating a new kind of thing | A ring of sparkles and an "Ooh! A rocket!" — small on purpose. |
+| Every fifth of the city eaten | A star flies up into the row. A chime, nothing more. |
+| The golden things | An extra-big growth spurt. A chime and glitter — deliberately no trophy. |
+| The magnet things | For five seconds everything nearby that fits comes sliding in by itself. A superpower, strictly positive. |
+| Runners | Birds, cats and dogs scoot away from the hole. They are always slower than it — a funny chase, never a frustrating one. |
+| First time eating a new kind of thing | A ring of sparkles and an "Ooh! A fire truck!" — small on purpose. |
 | Every so often | A surprise crosses the sky: butterflies, a rocket, balloons, a V of birds. Pure spectacle, drawn behind the game, nothing to tap. |
-| The landmark goes down | A comedy burp… |
-| **…and the world is empty** | **The win.** Fireworks, cheering, a trophy, the voice announces the new level — and the sky crossfades to a brand-new world while a fresh one is laid out. |
-| Every 5th world | The same but bigger — crown, brass fanfare, rainbow. |
+| **A whole district eaten clean** | **The frequent win.** Fireworks, cheering, "The park is all clean!" — deliberately no trophy. |
+| The stadium goes down | A comedy burp… |
+| **…and the whole city is gone** | **The big one.** Crown, brass fanfare, confetti storms, a trophy — and a brand-new city grows back. |
 
-**Growth is normalized at build time**: every thing's growth share is computed
-so that eating everything except the landmark always opens the mouth exactly
-wide enough for the landmark (plus a small margin). However the sizes and
-counts are tuned, progression can never dead-end.
+**Growth is normalized over the whole city**: every thing's share is computed
+so that eating everything except the stadium always opens the mouth exactly
+wide enough for the stadium (plus a small margin). However the map is tuned,
+progression can never dead-end — and the invariant survives saving, because
+the hole's size is saved along with what it ate.
 
-### Nine worlds
+### The sky has its own clock
 
-The star row fills as the world empties, because he cannot read. And because
-he cannot read the level number either, **each level is visibly a different
-place with different things in it** — meadow, sunset town, night town, beach,
-candy land, outer space, snow, jungle, then round again. The sky palette and
-the object set change together: the beach is full of shells and sailboats, the
-snow world of snowmen and sleds, space of rockets and flying saucers.
+With no levels, the sky doesn't wait for anything: day slides into sunset,
+night, dawn and round again every couple of minutes while he plays — the same
+city under stars is a different place.
 
-## It remembers him
+## It remembers him — the whole city
 
-Things eaten, worlds finished and **every kind of thing he has ever met** are
-saved on the device (localStorage) and restored next time:
+The save keeps the lifetime totals **and the city itself**: the city's seed,
+every thing already eaten, and how big the hole has grown. Closing the app
+halfway through the market and opening it tomorrow resumes *exactly there*,
+same city, same hole. That matters, because one city is a long, satisfying
+journey rather than a two-minute level.
 
-- The sky (and its world) opens on the level he reached, and the lifetime
-  counter keeps climbing for weeks
-- Progress *within* a level — and the hole's size — is deliberately **not**
-  saved. Every session opens on a fresh, full world with a small hole, so a
-  win is always just minutes away
-- **Start over** in the grown-ups menu wipes the save completely. The menu
-  also shows lifetime stats: things eaten, worlds finished, kinds met
-- Saves from the previous game in this repo (Bubble Zoo) are migrated
-  automatically — his level and trophies survive the update
+- **Start over** in the grown-ups menu wipes everything and rolls a fresh
+  city. The menu shows lifetime stats: things eaten, whole cities gobbled,
+  kinds met
+- Saves from both earlier versions of this repo (Bubble Zoo, the levelled
+  Hungry Hole) migrate automatically — lifetime totals survive every update
 - If storage is unavailable (private browsing, quota), the game silently
   plays session-only
 
@@ -152,25 +168,27 @@ Hearing his own name at the winning moment is the strongest reward in here.
 
 The dials that matter most:
 
-- `hole.baseRadius` — how small each level starts. Raise it and the mediums
-  fit sooner; lower it and the early scramble lasts longer
+- `hole.baseRadius` — how small a fresh city starts him. Raise it and boxes
+  fit sooner; lower it and the flower-bed scramble lasts longer
+- `city.growthExp` — the pacing dial. Higher = each new size takes longer
+  to reach; 1.0 makes growth proportional to size again
 - `hole.maxSpeed` and `hole.steerGain` — how fast the hole drives, and how
   much faster than the finger it moves
-- `world.scale` — how many screens wide and tall the world is
+- `city.width` / `city.height` — how big the city is
 - `camera.minZoom` / `maxZoom` — how far the camera pulls back as it grows
-- `things.counts` — things per size tier; the main "how long is a level" dial
-- `things.tierSizes` — how big each tier is
+- `things.tierSizes` — how big each of the seven sizes is
 - `things.runnerSpeed` — how fast the runners flee (keep it well under the
   hole's speed; the chase must always be winnable)
 - `special.magnetSeconds` / `magnetRadius` — how big the superpower feels
-- `objectSounds.chance` and `audio.speakChance` — how chatty the world is
+- `sky.secondsPerPhase` — how quickly day turns to sunset and night
+- `objectSounds.chance` and `audio.speakChance` — how chatty the city is
 - `surprise.minEatsBetween` / `maxEatsBetween` — how often the sky surprises
 
-The per-level skies are the `PALETTES` array in
-[`js/background.js`](js/background.js); each carries a `theme` tag that picks
-the matching object set in [`js/catalog.js`](js/catalog.js) — one line per
-thing, with a name, an optional voice and an optional `runner` flag. Add,
-remove or reorder freely.
+The map itself lives in [`js/city.js`](js/city.js): each district is a few
+lines of `row(…)` / `cluster(…)` / `add(…)` calls placing its things at
+fractions of the city — move a district, thicken an army, or add a whole new
+one freely. The sky palettes are the `PALETTES` array in
+[`js/background.js`](js/background.js).
 
 ### Knowing what is deployed
 
@@ -188,18 +206,18 @@ first time he opens it, not the second.
 ```
 index.html              shell, splash, parent gate
 css/style.css           splash, grown-ups menu, all the touch hardening
-js/main.js              canvas sizing, game loop, level builder, eating, menu wiring
+js/main.js              canvas sizing, game loop, camera, eating, city bookkeeping, menu wiring
 js/config.js            every tunable number
-js/hole.js              the hole itself: finger-chase, growth spring, gulp, eyes
-js/thing.js             a thing in the world: idle, flee, wobble, spiral down
-js/catalog.js           what fills each world, tier by tier, plus the praise phrases
+js/city.js              THE MAP — districts, armies, the seeded city generator, praise phrases
+js/hole.js              the hole itself: joystick steering, growth spring, gulp, eyes
+js/thing.js             a thing in the city: idle, flee, wobble, spiral down
 js/particles.js         pooled confetti, glitter, shards, rings, fireworks
-js/celebrate.js         level progress, first-meet hellos, the clean-plate celebration
+js/celebrate.js         star row, district-clean and whole-city celebrations, first-meets
 js/hud.js               star row, trophy tally, win banner, screen flash
 js/audio.js             synthesized sound — gulps, boings, voices — and speech
-js/background.js        the per-level skies (with theme tags), sun/moon, stars, clouds, hills
+js/background.js        the drifting skies, and the city ground: roads, lawn, border
 js/surprise.js          the butterflies / rocket / balloons / birds flybys
-js/save.js              what the game remembers between sessions (+ Bubble Zoo migration)
+js/save.js              the persistent city + lifetime totals (+ old-save migration)
 js/input.js             multi-touch pointer tracking, gesture suppression
 sw.js                   offline cache
 tools/make-icons.mjs    regenerates the app icons (zero dependencies)
@@ -208,7 +226,7 @@ tools/make-icons.mjs    regenerates the app icons (zero dependencies)
 ## Known limits
 
 - **Emoji look slightly different on Android and iOS.** Fine for this purpose,
-  and `catalog.js` is one field per thing away from real illustrations.
+  and `city.js` is one field per thing away from real illustrations.
 - **The voice is the phone's own text-to-speech**, so its quality varies by
   device. It can be switched off entirely in the grown-ups menu.
 - **The sounds are synthesized approximations** — a cheerful cartoon vroom

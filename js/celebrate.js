@@ -1,26 +1,24 @@
 /* ---------------------------------------------------------------------------
-   Levels, and the one moment that counts as winning.
+   The rhythm of reward, tuned so the loud moments stay meaningful.
 
-     every gulp        sparkles sized to the thing, the gulp sound, sometimes
-                       the thing's own voice or its name. That is all.
-     every 1/5 eaten   a star flies up into the row. A chime, nothing more.
-     golden thing      an extra growth spurt. A chime and glitter, but
-                       deliberately no trophy.
-     first meeting     a ring of sparkles and a hello by name — small on
-                       purpose, so it never competes with the win.
-     clean plate       THE win. The whole world eaten: fireworks, cheering, a
-                       trophy, and the sky changes to a new world.
-     every 5th world   the same but bigger — crown, brass fanfare, rainbow.
+     every gulp          sparkles sized to the thing, the gulp sound, sometimes
+                         the thing's own voice or its name. That is all.
+     every 1/5 of city   a star flies up into the row. A chime, nothing more.
+     golden thing        an extra growth spurt. A chime and glitter.
+     first meeting       a ring of sparkles and a hello by name.
+     DISTRICT clean      the frequent win: fireworks, cheering, "The park is
+                         all clean!" — no trophy, deliberately.
+     THE WHOLE CITY      the big one. Crown, brass fanfare, confetti storms,
+                         a trophy — and then a brand-new city grows back.
 
-   The point of the quiet stretch is the loud moment at the end of it. If the
-   trophy shows up every few gulps it stops meaning anything, which is exactly
-   what went wrong in the first version of the old bubble game.
+   If the trophy showed up every few minutes it would stop meaning anything —
+   which is exactly what went wrong in the first version of the old game.
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
 import { audio } from './audio.js';
 import { rand, pick } from './util.js';
-import { BIG_CHEERS, MEGA_CHEERS } from './catalog.js';
+import { BIG_CHEERS, MEGA_CHEERS, DISTRICT_CHEERS } from './city.js';
 import { met, markDirty, flushSave } from './save.js';
 
 export class Celebrations {
@@ -29,37 +27,38 @@ export class Celebrations {
    * `fx` lives in SCREEN space (confetti, fireworks); `toScreen` converts a
    * field point to screen for the star that flies up into the HUD row.
    */
-  constructor({ particles, fx, hud, timers, world, background, toScreen }) {
+  constructor({ particles, fx, hud, timers, world, toScreen }) {
     this.particles = particles;
     this.fx = fx ?? particles;
     this.hud = hud;
     this.timers = timers;
     this.world = world;
-    this.background = background;
     this.toScreen = toScreen ?? ((x, y) => ({ x, y }));
 
-    // Stars already promised to the row, including any still in flight. Without
-    // this, two eats in the same moment both see the old star count and send
-    // duplicates.
+    // Stars already promised to the row, including any still in flight.
     this.starsScheduled = 0;
 
-    // How many things this level started with — set by the level builder.
-    // The star row fills as a fraction of it, so levels can be any size.
-    this.levelTotal = 1;
-    this.eatenThisLevel = 0;
+    // How many things this city started with, and how many are already gone
+    // (a resumed city starts partway through the star row).
+    this.cityTotal = 1;
+    this.eatenThisCity = 0;
   }
 
-  /** Called by the level builder every time a fresh world is laid out. */
-  beginLevel(totalThings) {
-    this.levelTotal = Math.max(1, totalThings);
-    this.eatenThisLevel = 0;
-    this.starsScheduled = 0;
+  /** Called whenever a city is built — fresh or resumed from the save. */
+  beginCity(totalThings, alreadyEaten = 0) {
+    this.cityTotal = Math.max(1, totalThings);
+    this.eatenThisCity = alreadyEaten;
+    // A resumed city keeps its earned stars, without replaying their chimes.
+    const C = CONFIG.celebrate;
+    const owed = Math.min(C.starsPerLevel, Math.floor((alreadyEaten / this.cityTotal) * C.starsPerLevel));
+    this.starsScheduled = owed;
+    this.hud.clearStars();
+    for (let i = 0; i < owed; i++) this.hud.fillStar();
   }
 
   reset() {
     this.starsScheduled = 0;
-    this.eatenThisLevel = 0;
-    this.background?.resetTo(1);
+    this.eatenThisCity = 0;
   }
 
   /**
@@ -99,7 +98,7 @@ export class Celebrations {
       audio.chime(4);
     }
 
-    this.eatenThisLevel++;
+    this.eatenThisCity++;
     // The flying star travels across the SCREEN, wherever the camera was
     // looking when the gulp landed.
     const s = this.toScreen(x, y);
@@ -108,15 +107,14 @@ export class Celebrations {
 
   /**
    * The first time he ever eats this kind of thing: a small hello, sized to
-   * never compete with a clean-plate win. Over weeks, across nine worlds of
-   * contents, these keep happening long after the first session.
+   * never compete with a district or city win.
    */
   #firstMeet(thing, x, y, hue) {
     met.add(thing.name);
     markDirty();
     flushSave();   // a new discovery is never worth losing to the write throttle
 
-    const rare = thing.tier >= 3;
+    const rare = thing.tier >= 4;
     this.particles.ringWave(x, y, hue, 30, rare ? 320 : 240, 0.6);
     this.particles.sparkleBurst(x, y, hue, 16);
     audio.sparkle(4);
@@ -131,66 +129,44 @@ export class Celebrations {
     this.particles.sparkleBurst(x, y, rand(0, 360), 5);
   }
 
-  /* --- level progress ----------------------------------------------------- */
+  /* --- the star row -------------------------------------------------------- */
 
   #advance(x, y) {
     const C = CONFIG.celebrate;
     const { hud, timers } = this;
 
-    const fraction = this.eatenThisLevel / this.levelTotal;
+    const fraction = this.eatenThisCity / this.cityTotal;
     const target = Math.min(C.starsPerLevel, Math.floor(fraction * C.starsPerLevel + 1e-9));
     if (target <= this.starsScheduled) return;
 
     const owed = target - this.starsScheduled;
     this.starsScheduled = target;
-    const completesLevel = target >= C.starsPerLevel;
 
     for (let i = 0; i < owed; i++) {
-      const isLast = i === owed - 1;
-      // Staggered, so a magnet feast sends them up as a little run rather
-      // than all on the same frame.
       timers.after(i * 0.14, () => {
         audio.chime(3);
         hud.flyStar(x, y, () => {
           hud.fillStar();
           audio.sparkle(3);
-          if (isLast && completesLevel) this.#levelUp();
         });
       });
     }
   }
 
-  /* --- winning ------------------------------------------------------------ */
+  /* --- winning ------------------------------------------------------------- */
 
-  #levelUp() {
-    const { fx, hud, timers, world, background } = this;
-    const C = CONFIG.celebrate;
+  /** A whole district eaten clean — the frequent win. Loud, but no trophy. */
+  districtClean(district) {
+    const { fx, hud, timers, world } = this;
 
-    const completed = hud.level;
-    const mega = completed % C.megaEveryLevels === 0;
+    hud.showFlash(0.95, { rainbow: true });
+    hud.showBanner('party', 3.0);
+    fx.confettiShower(world, 140, 1.15);
+    audio.cheer(2.1);
+    audio.chime(7);
+    audio.kick();
 
-    hud.level++;
-    hud.trophies++;
-    hud.clearStars();
-    this.starsScheduled = 0;
-    markDirty();
-    flushSave();   // a won world is never worth losing to the write throttle
-
-    // The sky becomes somewhere new — and the level builder will fill it with
-    // that world's own things. He cannot read the level number; this is what
-    // actually tells him he moved on.
-    background?.setLevel(hud.level);
-
-    hud.showFlash(mega ? 1.4 : 0.95, { rainbow: true });
-    hud.showBanner(mega ? 'mega' : 'party', mega ? 3.6 : 3.0);
-
-    fx.confettiShower(world, mega ? 200 : 140, mega ? 1.6 : 1.15);
-    audio.cheer(mega ? 2.7 : 2.1);
-    if (mega) audio.fanfare();
-    else { audio.chime(7); audio.kick(); }
-
-    const bursts = mega ? 7 : 5;
-    for (let i = 0; i < bursts; i++) {
+    for (let i = 0; i < 5; i++) {
       timers.after(i * 0.26, () => {
         fx.firework(
           rand(world.w * 0.15, world.w * 0.85),
@@ -202,13 +178,42 @@ export class Celebrations {
       });
     }
 
-    if (mega) timers.after(0.95, () => fx.confettiShower(world, 160, 1.4));
+    const line = DISTRICT_CHEERS[district] ?? 'All clean!';
+    const suffix = CONFIG.playerName ? ` ${CONFIG.playerName}!` : '';
+    timers.after(0.55, () => audio.speak(pick(BIG_CHEERS).replace('%s', ''), { interrupt: true }));
+    timers.after(1.9, () => audio.speak(line + suffix, { interrupt: true }));
+    flushSave();
+  }
 
-    // Praise first, then the new level number — spaced so they do not collide,
-    // and both timed to land over the tail of the bang rather than under it.
+  /** The whole city, stadium and all. The biggest moment in the game. */
+  cityComplete() {
+    const { fx, hud, timers, world } = this;
+
+    hud.trophies++;
+    markDirty();
+    flushSave();
+
+    hud.showFlash(1.4, { rainbow: true });
+    hud.showBanner('mega', 3.6);
+    fx.confettiShower(world, 200, 1.6);
+    audio.cheer(2.7);
+    audio.fanfare();
+
+    for (let i = 0; i < 7; i++) {
+      timers.after(i * 0.26, () => {
+        fx.firework(
+          rand(world.w * 0.15, world.w * 0.85),
+          rand(world.h * 0.16, world.h * 0.58),
+          rand(0, 360),
+        );
+        audio.kick();
+        audio.snare();
+      });
+    }
+    timers.after(0.95, () => fx.confettiShower(world, 160, 1.4));
+
     const suffix = CONFIG.playerName ? `, ${CONFIG.playerName}` : '';
-    const phrase = pick(mega ? MEGA_CHEERS : BIG_CHEERS).replace('%s', suffix);
-    timers.after(0.55, () => audio.speak(phrase, { interrupt: true }));
-    timers.after(mega ? 2.4 : 1.9, () => audio.speak(`Level ${hud.level}!`, { interrupt: true }));
+    timers.after(0.55, () => audio.speak(pick(MEGA_CHEERS).replace('%s', suffix), { interrupt: true }));
+    timers.after(2.6, () => audio.speak('Here comes a brand new city!', { interrupt: true }));
   }
 }

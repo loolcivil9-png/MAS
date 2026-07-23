@@ -8,7 +8,7 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '2.1.0',
+  version: '3.0.0',
 
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Hungry Hole". */
@@ -25,11 +25,18 @@ export const CONFIG = {
     maxDelta: 0.05,        // seconds; stops everything teleporting after the screen locks
   },
 
-  /* --- the world and the camera -------------------------------------------- */
-  /* The world is bigger than the screen. The camera rides on the hole and
-     zooms out as it grows, exactly like the game this one is modelled on. */
-  world: {
-    scale: 2.2,            // the world is this many screens wide and tall
+  /* --- the city and the camera ---------------------------------------------- */
+  /* There are no levels. There is ONE city — a big, organized map with a park
+     at the bottom, a market above it, houses, busy streets, a downtown block
+     of buildings and a stadium at the top. It is laid out by a seeded
+     generator, so the same seed always rebuilds the same city — which is how
+     a half-eaten city can be saved and resumed. */
+  city: {
+    width: 1600,           // fixed world size in logical units, independent of
+    height: 3200,          // the screen — a portrait city about 2 by 4 screens
+    growthExp: 1.3,        // growth shares scale with size^this. Above 1 means
+                           // small things give little growth, so each new size
+                           // takes a satisfying while to reach
   },
   camera: {
     holeScreenFrac: 0.085, // the hole tries to appear this fraction of screen height
@@ -40,12 +47,20 @@ export const CONFIG = {
     lookAhead: 0.22,       // seconds of velocity the camera leads by
   },
 
+  /* --- the sky -------------------------------------------------------------- */
+  /* With no levels, the sky drifts on its own clock instead: day slides into
+     sunset, night, dawn and round again while he plays. */
+  sky: {
+    secondsPerPhase: 150,
+  },
+
   /* --- the hole ------------------------------------------------------------ */
   /* Steering is RELATIVE, like a joystick: the finger's movement sets the
      hole's direction and speed, wherever on the glass the finger happens to
      be. Hold still and the hole eases to a stop; let go and it glides out. */
   hole: {
-    baseRadius: 40,        // how small it starts each level: only tier-1 fits at first
+    baseRadius: 28,        // how small it starts in a fresh city: only the very
+                           // tiniest things fit at first
     mouthRatio: 1.0,       // a thing fits when its size <= hole radius * this
     maxSpeed: 560,         // world units per second, plus a little as it grows
     steerGain: 1.4,        // hole speed vs finger speed — slightly faster feels obedient
@@ -59,9 +74,8 @@ export const CONFIG = {
 
   /* --- the things it eats -------------------------------------------------- */
   things: {
-    tierSizes: [30, 48, 72, 104, 150],  // logical radius per tier; tier 5 is the landmark
-    counts: [18, 12, 8, 5, 1],          // how many of each tier fill the whole world
-    placementTries: 18,    // candidate positions tested; the roomiest one wins
+    // Seven sizes, flowers to stadium. The last one is the landmark.
+    tierSizes: [22, 34, 50, 72, 100, 135, 180],
     overlapFactor: 1.0,    // eating starts when the hole's edge reaches a thing...
     thingHit: 0.8,         // ...this deep into its body. Generous on purpose:
                            // he aims AT things, he does not centre on them
@@ -91,13 +105,12 @@ export const CONFIG = {
     maxStep: 9,            // top of the run; it holds there while he keeps going
   },
 
-  /* --- levels and celebrations -------------------------------------------- */
-  /* The trophy is the LEVEL — a whole world eaten — and nothing else earns
-     one. Between levels the game stays deliberately quiet, so that when the
-     fireworks do arrive they mean something. */
+  /* --- celebrations --------------------------------------------------------- */
+  /* Cleaning a whole DISTRICT (the park, the market, downtown…) is the
+     frequent win — fireworks and cheering, no trophy. Eating the WHOLE CITY is
+     the big one: crown, fanfare, a trophy, and a brand-new city grows back. */
   celebrate: {
-    starsPerLevel: 5,      // a star fills for every fifth of the world eaten
-    megaEveryLevels: 5,    // every 5th world earns the crown and the brass fanfare
+    starsPerLevel: 5,      // a star fills for every fifth of the city eaten
   },
 
   /* --- thing sounds --------------------------------------------------------- */
@@ -117,9 +130,10 @@ export const CONFIG = {
   },
 
   /* --- saving --------------------------------------------------------------- */
-  /* The world remembers him between sessions: things eaten, worlds finished,
-     and everything he has ever met. "Start over" in the grown-ups menu wipes
-     it. Old Bubble Zoo saves are migrated so his trophies survive the update. */
+  /* The city itself is saved: which things are already eaten, how big the
+     hole has grown, plus the lifetime totals. Closing the app mid-city and
+     opening it tomorrow resumes exactly where he left off. "Start over" in
+     the grown-ups menu wipes it. Older saves are migrated. */
   save: {
     key: 'hungry-hole-save',
     legacyKey: 'bubble-zoo-save',

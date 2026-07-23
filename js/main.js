@@ -6,17 +6,22 @@
      SCREEN  the logical viewport (always 1000 units tall). The sky, the HUD,
              the win confetti and the surprises live here.
 
-     FIELD   the world itself — CONFIG.world.scale screens wide and tall.
-             The hole, the things it eats, and their sparkles live here, and
-             a camera (position + zoom) maps field to screen. The camera
-             rides on the hole and pulls back as it grows.
+     CITY    the world itself — one big, organized city (see city.js). The
+             hole, the things it eats, and their sparkles live here, and a
+             camera (position + zoom) maps city to screen. The camera rides
+             on the hole and pulls back as it grows.
+
+   There are no levels. The city persists: its seed and every eaten thing are
+   saved, so tomorrow continues exactly where today stopped. Cleaning a whole
+   district is the frequent win; eating the whole city is the big one, and
+   then a brand-new city grows back.
 
    Steering is relative: the finger's movement drives the hole's velocity;
    where the finger sits on the glass is irrelevant.
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
-import { Pool, Timers, clamp, rand, pick } from './util.js';
+import { Pool, Timers, clamp, rand } from './util.js';
 import { Background } from './background.js';
 import { Hole } from './hole.js';
 import { Thing } from './thing.js';
@@ -26,7 +31,7 @@ import { Celebrations } from './celebrate.js';
 import { audio } from './audio.js';
 import { attachInput, suppressBrowserGestures } from './input.js';
 import { Surprises } from './surprise.js';
-import { buildLevelList, TOTAL_KINDS } from './catalog.js';
+import { generateCity, TOTAL_KINDS } from './city.js';
 import { met, loadSave, initSave, flushSave, clearSave } from './save.js';
 
 /* --- elements --------------------------------------------------------------- */
@@ -60,13 +65,13 @@ const world = {
 let scale = 1;                                    // device pixels per logical unit
 let viewport = { left: 0, top: 0, width: 1, height: 1 };
 
-/* --- field space ------------------------------------------------------------- */
+/* --- city space -------------------------------------------------------------- */
 
-/** The world the hole lives in — several screens big. Sized per level. */
-const field = { w: 1000, h: 2200 };
+/** The world the hole lives in — one fixed-size city. */
+const field = { w: CONFIG.city.width, h: CONFIG.city.height };
 
-/** The camera: where on the field the screen is looking, and how wide. */
-const cam = { x: 500, y: 1100, zoom: CONFIG.camera.maxZoom };
+/** The camera: where on the city the screen is looking, and how wide. */
+const cam = { x: field.w / 2, y: field.h / 2, zoom: CONFIG.camera.maxZoom };
 
 function updateCamera(dt) {
   const C = CONFIG.camera;
@@ -93,7 +98,7 @@ const toScreen = (fx, fy) => ({
   y: (fy - cam.y) * cam.zoom + world.h / 2,
 });
 
-/** The field rectangle currently visible on screen. */
+/** The city rectangle currently visible on screen. */
 function visibleRect() {
   const halfW = (world.w / 2) / cam.zoom;
   const halfH = (world.h / 2) / cam.zoom;
@@ -103,15 +108,15 @@ function visibleRect() {
 /* --- systems ---------------------------------------------------------------- */
 
 const background = new Background();
-const particles = new Particles();   // field space: gulp sparkles, rings
+const particles = new Particles();   // city space: gulp sparkles, rings
 const fx = new Particles();          // screen space: confetti, fireworks, trails
 const hud = new Hud();
 const timers = new Timers();
-const celebrations = new Celebrations({ particles, fx, hud, timers, world, background, toScreen });
+const celebrations = new Celebrations({ particles, fx, hud, timers, world, toScreen });
 const surprises = new Surprises(fx);
 const hole = new Hole();
 
-const things = new Pool(60, () => new Thing());
+const things = new Pool(130, () => new Thing());
 
 let running = false;
 let started = false;
@@ -120,24 +125,42 @@ let lastFrame = 0;
 let wakeLock = null;
 
 let elapsed = 0;          // game-time seconds, drives the eat-streak timing
-let levelPending = false; // set between the last gulp and the next world
+let rebuildPending = false; // set between the last bite of a city and the next one
 let magnetT = 0;          // seconds of magnet superpower remaining
 let magnetEaten = 0;      // eats since the magnet switched on (voice cap)
 let lastEatAt = -Infinity;
 let streakStep = 0;
 
-/* --- the world remembers him ------------------------------------------------- */
+// The persistent city.
+let citySeed = (Math.random() * 0xffffffff) >>> 0;
+let cityStart = { x: field.w / 2, y: field.h * 0.885 };
+const cityEaten = new Set();          // plan ids already eaten
+const districtLeft = new Map();       // district -> things still standing
 
-// Restore before anything spawns, so the sky (and its world) opens on the
-// level he reached. Old Bubble Zoo saves migrate: his trophies survive.
+// The sky drifts through its palettes on its own clock — day, sunset, night…
+let skyPhase = 1;
+let skyT = 0;
+
+/* --- the city remembers him --------------------------------------------------- */
+
 const restored = loadSave();
+let restoredHoleR = null;
 if (restored) {
   hud.score = restored.totalEaten;
-  hud.level = restored.level;
-  hud.trophies = restored.trophies;
-  background.resetTo(hud.level);
+  hud.trophies = restored.cities;
+  if (restored.city) {
+    citySeed = restored.city.seed;
+    for (const id of restored.city.eaten) cityEaten.add(id);
+    restoredHoleR = restored.city.holeR;
+  }
 }
-initSave(() => ({ totalEaten: hud.score, level: hud.level, trophies: hud.trophies }));
+initSave(() => ({
+  totalEaten: hud.score,
+  cities: hud.trophies,
+  citySeed,
+  cityEaten: [...cityEaten],
+  holeR: hole.r,
+}));
 
 /* --- sizing ----------------------------------------------------------------- */
 
@@ -177,12 +200,8 @@ function resize() {
 
 /**
  * Cheap per-frame check that the backing store still matches the element.
- *
- * Resize events are unreliable on phones — the URL bar collapsing mid-play, a
- * rotation while the screen is off, or a first paint that lands before layout
- * has settled can all leave the canvas at the wrong size with no event to
- * react to. Two integer comparisons a frame makes the whole thing
- * self-correcting instead of dependent on catching every event.
+ * Resize events are unreliable on phones; two integer comparisons a frame
+ * make the whole thing self-correcting instead.
  */
 function ensureSize() {
   const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.render.maxDPR);
@@ -231,7 +250,7 @@ function onPoint(x, y, kind, pointerId) {
     lastPt.set(pointerId, { x, y });
     if (!p || pointers[pointers.length - 1] !== pointerId) return;
     // A screen-space finger stroke commands the same on-screen motion at any
-    // zoom, so dividing by the camera zoom converts it to field units.
+    // zoom, so dividing by the camera zoom converts it to city units.
     hole.steer((x - p.x) / cam.zoom, (y - p.y) / cam.zoom);
   } else { // 'up'
     const i = pointers.indexOf(pointerId);
@@ -244,7 +263,7 @@ function onPoint(x, y, kind, pointerId) {
 attachInput(canvas, toLogical, onPoint);
 suppressBrowserGestures(document);
 
-/* --- building a world -------------------------------------------------------- */
+/* --- building the city -------------------------------------------------------- */
 
 function activeThings() {
   let n = 0;
@@ -253,79 +272,62 @@ function activeThings() {
 }
 
 /**
- * Lays out a fresh world across the whole field: `counts` things per tier,
- * biggest placed first into the roomiest spots (dart-throwing, keep the
- * candidate furthest from the already-placed), one golden growth-spurt
- * thing, and from level 2 a magnet.
+ * Realizes the city plan for `citySeed`, skipping anything in `cityEaten` —
+ * which is how a saved half-eaten city comes back exactly as it was left.
  *
- * Growth is then NORMALIZED: the shares of all non-landmark things sum to
- * exactly the growth needed for the landmark to fit (times a small margin).
- * However the level is tuned and whatever order he eats in, eating everything
- * else always opens the mouth wide enough for the centrepiece. Progression is
- * an invariant, not a hope.
+ * Growth shares are normalized over the FULL plan (eaten included): the sum
+ * of every share equals exactly the growth needed for the stadium to fit.
+ * A resumed hole carries its saved size, which already contains the shares
+ * of everything it ate — the invariant survives saving and loading.
  */
-function buildLevel(level) {
+function buildCity() {
   const T = CONFIG.things;
   things.releaseAll();
+  districtLeft.clear();
 
-  // The field spans several screens of the current aspect ratio, and stays
-  // fixed for the whole level even if the device rotates mid-way.
-  field.w = Math.round(world.w * CONFIG.world.scale);
-  field.h = Math.round(world.h * CONFIG.world.scale);
+  const plan = generateCity(citySeed);
+  cityStart = plan.start;
 
-  const list = buildLevelList(background.theme, T.counts);
-  list.sort((a, b) => b.tier - a.tier);
+  const landmarkTier = T.tierSizes.length - 1;
+  const rNeeded = (T.tierSizes[landmarkTier] / CONFIG.hole.mouthRatio) * T.landmarkFitMargin;
+  const totalGrowth = Math.max(0, rNeeded - CONFIG.hole.baseRadius);
+  const weight = (p) => (p.tier === landmarkTier ? 0 : Math.pow(T.tierSizes[p.tier], CONFIG.city.growthExp)
+    * (p.golden ? CONFIG.special.goldenGrowthMult : 1));
+  const weightSum = plan.things.reduce((s, p) => s + weight(p), 0) || 1;
 
-  // Wherever the hole currently sits counts as occupied — generously, since
-  // its drawn radius may still be spring-shrinking — so a fresh world never
-  // opens with something already half-way down the hatch.
-  const placed = [{
-    x: hole.x,
-    y: hole.y,
-    size: Math.max(hole.rShown, CONFIG.hole.baseRadius) + T.tierSizes[0],
-  }];
-
-  for (const { entry, tier } of list) {
-    const size = T.tierSizes[tier];
-    const m = size * 0.7;
-
-    let bestX = field.w / 2;
-    let bestY = field.h / 2;
-    let bestGap = -Infinity;
-    for (let i = 0; i < T.placementTries; i++) {
-      const x = rand(m, field.w - m);
-      const y = rand(m, field.h - m);
-      let gap = Infinity;
-      for (const p of placed) {
-        gap = Math.min(gap, Math.hypot(p.x - x, p.y - y) - (p.size + size));
-      }
-      if (gap > bestGap) { bestGap = gap; bestX = x; bestY = y; }
-      if (gap === Infinity) break; // nothing to avoid yet
-    }
+  for (const p of plan.things) {
+    if (cityEaten.has(p.id)) continue;
 
     const th = things.acquire();
-    th.spawn(entry, tier, size, bestX, bestY);
-    placed.push(th);
+    th.spawn(p.entry, p.tier, T.tierSizes[p.tier], p.x, p.y);
+    th.cityId = p.id;
+    th.district = p.district;
+    th.golden = p.golden;
+    th.magnet = p.magnet;
+    th.growth = totalGrowth * (weight(p) / weightSum);
+
+    if (p.district) districtLeft.set(p.district, (districtLeft.get(p.district) ?? 0) + 1);
   }
 
-  const spawned = placed.slice(1); // drop the hole's placeholder
+  celebrations.beginCity(plan.things.length, cityEaten.size);
+}
 
-  const smalls = spawned.filter((t) => t.tier <= 1);
-  if (smalls.length) pick(smalls).golden = true;
-  if (level >= CONFIG.special.magnetFromLevel) {
-    const candidates = spawned.filter((t) => t.tier <= 2 && !t.golden);
-    if (candidates.length) pick(candidates).magnet = true;
-  }
-
-  const landmarkSize = T.tierSizes[T.tierSizes.length - 1];
-  const rNeeded = (landmarkSize / CONFIG.hole.mouthRatio) * T.landmarkFitMargin;
-  const totalGrowth = Math.max(0, rNeeded - CONFIG.hole.baseRadius);
-  const eaters = spawned.filter((t) => t.tier < T.tierSizes.length - 1);
-  const weight = (t) => t.size * (t.golden ? CONFIG.special.goldenGrowthMult : 1);
-  const weightSum = eaters.reduce((s, t) => s + weight(t), 0) || 1;
-  for (const t of eaters) t.growth = totalGrowth * (weight(t) / weightSum);
-
-  celebrations.beginLevel(spawned.length);
+/** The whole city is gone: celebrate hugely, then a brand-new one grows back. */
+function newCityAfterCelebration() {
+  rebuildPending = true;
+  celebrations.cityComplete();
+  timers.after(4.2, () => {
+    citySeed = (Math.random() * 0xffffffff) >>> 0;
+    cityEaten.clear();
+    hole.r = CONFIG.hole.baseRadius;   // the spring animates the shrink
+    buildCity();
+    hole.x = cityStart.x;
+    hole.y = cityStart.y;
+    hole.vx = 0;
+    hole.vy = 0;
+    rebuildPending = false;
+    flushSave();
+  });
 }
 
 /* --- eating ------------------------------------------------------------------ */
@@ -366,9 +368,10 @@ function eatCheck() {
   }
 }
 
-/** A swallow just finished: score it, grow, and check for special powers. */
+/** A swallow just finished: score it, grow, and check what it completed. */
 function onEaten(th) {
   hole.grow(th.growth);
+  cityEaten.add(th.cityId);
 
   const muteVoice = magnetT > 0 && ++magnetEaten > 2;
   celebrations.onEat(th, muteVoice);
@@ -376,6 +379,15 @@ function onEaten(th) {
 
   if (th.magnet) startMagnet();
   if (th.tier === LANDMARK_TIER) timers.after(0.6, () => audio.burp());
+
+  // District bookkeeping: the last thing of a district is the frequent win.
+  if (th.district) {
+    const left = (districtLeft.get(th.district) ?? 1) - 1;
+    districtLeft.set(th.district, left);
+    if (left === 0 && activeThings() > 0) celebrations.districtClean(th.district);
+  }
+
+  if (activeThings() === 0 && !rebuildPending) newCityAfterCelebration();
 }
 
 /**
@@ -406,25 +418,21 @@ function magnetPull(dt) {
   }
 }
 
-/** Clean plate: the last thing has gone down. Shortly after, a fresh world. */
-function checkCleanPlate() {
-  if (levelPending || !started || activeThings() > 0) return;
-  levelPending = true;
-  // The level-up spectacle itself fires from celebrate.js when the fifth star
-  // lands; this just brings the next world in after the fireworks have peaked.
-  timers.after(2.8, () => {
-    hole.r = CONFIG.hole.baseRadius;   // the spring animates the shrink
-    buildLevel(hud.level);
-    levelPending = false;
-  });
-}
-
 /* --- loop ------------------------------------------------------------------- */
 
 function update(dt) {
   elapsed += dt;
   timers.update(dt);
+
+  // Day slides into sunset, night, dawn… on its own gentle clock.
+  skyT += dt;
+  if (skyT >= CONFIG.sky.secondsPerPhase) {
+    skyT = 0;
+    skyPhase++;
+    background.setLevel(skyPhase);
+  }
   background.update(dt);
+
   surprises.update(dt, world);
   hole.update(dt, field);
   updateCamera(dt);
@@ -441,7 +449,6 @@ function update(dt) {
     if (th.update(dt, field, hole) === 'eaten') onEaten(th);
   }
 
-  checkCleanPlate();
   particles.update(dt, field);
   fx.update(dt, world);
   hud.update(dt, world);
@@ -453,20 +460,20 @@ function render() {
   background.draw(ctx, world);
   surprises.draw(ctx);   // behind the world he plays in
 
-  // --- field space, through the camera --------------------------------------
+  // --- city space, through the camera ---------------------------------------
   const z = cam.zoom;
   ctx.setTransform(
     scale * z, 0, 0, scale * z,
     scale * (world.w / 2 - cam.x * z),
     scale * (world.h / 2 - cam.y * z),
   );
-  background.drawGround(ctx, visibleRect(), field);
+  const view = visibleRect();
+  background.drawGround(ctx, view, field);
   hole.draw(ctx);
   // Things draw over the hole, so a swallowed one visibly spirals down INTO it.
-  const view = visibleRect();
   for (const th of things.items) {
     if (!th.active) continue;
-    // Skip anything comfortably outside the camera — the field is big.
+    // Skip anything comfortably outside the camera — the city is big.
     if (th.x + th.size * 2 < view.x || th.x - th.size * 2 > view.x + view.w
       || th.y + th.size * 2 < view.y || th.y - th.size * 2 > view.y + view.h) continue;
     th.draw(ctx);
@@ -482,25 +489,42 @@ function render() {
 }
 
 /**
- * When only a few things remain, gently point at the ones that are off
- * screen. In a world several screens big, "where did the last strawberry
- * go?" must never be a dead end.
+ * Gentle golden arrows at the screen edge whenever he could get lost:
+ * pointing at the stragglers when only a few things remain, and pointing at
+ * the nearest EDIBLE thing whenever nothing on screen fits his mouth. In a
+ * city this big, "where do I go?" must never be a dead end.
  */
 function drawGuides(ctx) {
   const remaining = activeThings();
-  if (remaining === 0 || remaining > 4) return;
+  if (remaining === 0) return;
 
-  const cx = world.w / 2;
-  const cy = world.h / 2;
-  const inset = 74;
+  const fewLeft = remaining <= 4;
+  const targets = [];
+  let edibleVisibleOnScreen = false;
+  let nearestEdible = null;
+  let nearestEdibleD = Infinity;
 
   for (const th of things.items) {
     if (!th.active || th.state !== 'idle') continue;
     const s = toScreen(th.x, th.y);
     const onScreen = s.x > -40 && s.x < world.w + 40 && s.y > -40 && s.y < world.h + 40;
-    if (onScreen) continue;
+    const edible = th.size <= hole.mouth;
 
-    // Walk from the centre toward the target and stop at the screen border.
+    if (edible && onScreen) edibleVisibleOnScreen = true;
+    if (edible) {
+      const d = Math.hypot(th.x - hole.x, th.y - hole.y);
+      if (d < nearestEdibleD) { nearestEdibleD = d; nearestEdible = s; }
+    }
+    if (fewLeft && !onScreen) targets.push(s);
+  }
+
+  if (!fewLeft && !edibleVisibleOnScreen && nearestEdible) targets.push(nearestEdible);
+
+  const cx = world.w / 2;
+  const cy = world.h / 2;
+  const inset = 74;
+
+  for (const s of targets.slice(0, 4)) {
     const dx = s.x - cx;
     const dy = s.y - cy;
     const tx = dx > 0 ? (world.w - inset - cx) / dx : dx < 0 ? (inset - cx) / dx : Infinity;
@@ -569,13 +593,27 @@ function start() {
   splash.classList.add('is-hidden');
   resize();
 
-  field.w = Math.round(world.w * CONFIG.world.scale);
-  field.h = Math.round(world.h * CONFIG.world.scale);
+  buildCity();
+  if (activeThings() === 0) {
+    // The save caught a fully-eaten city mid-celebration. Resuming an empty
+    // world would be a dead end — roll the brand-new city it was owed.
+    citySeed = (Math.random() * 0xffffffff) >>> 0;
+    cityEaten.clear();
+    restoredHoleR = null;
+    buildCity();
+  }
   hole.reset(field);
+  hole.x = cityStart.x;
+  hole.y = cityStart.y;
+  if (restoredHoleR !== null) {
+    // Resuming a half-eaten city: the hole comes back at its earned size.
+    hole.r = restoredHoleR;
+    hole.rShown = restoredHoleR;
+  }
   cam.x = hole.x;
   cam.y = hole.y;
   cam.zoom = CONFIG.camera.maxZoom;
-  buildLevel(hud.level);
+
   audio.chime(4);
   startLoop();
 }
@@ -659,8 +697,8 @@ function openParentMenu() {
   pmVolume.value = String(Math.round(CONFIG.audio.masterVolume * 100));
   pmVoice.checked = CONFIG.audio.voiceEnabled;
   pmStat.textContent =
-    `Ate ${hud.score} thing${hud.score === 1 ? '' : 's'}, finished ` +
-    `${hud.trophies} world${hud.trophies === 1 ? '' : 's'}, and met ` +
+    `Ate ${hud.score} thing${hud.score === 1 ? '' : 's'}, gobbled ` +
+    `${hud.trophies} whole cit${hud.trophies === 1 ? 'y' : 'ies'}, and met ` +
     `${met.size} of ${TOTAL_KINDS} different things.`;
   parentMenu.hidden = false;
 }
@@ -682,20 +720,28 @@ pmClose.addEventListener('click', closeParentMenu);
 pmRestart.addEventListener('click', () => {
   clearSave();            // forget everything, not just this session
   hud.reset();
-  celebrations.reset();   // also snaps the sky back to level 1
+  celebrations.reset();
   particles.clear();
   fx.clear();
   timers.clear();
   things.releaseAll();
+  citySeed = (Math.random() * 0xffffffff) >>> 0;
+  cityEaten.clear();
+  restoredHoleR = null;
+  skyPhase = 1;
+  skyT = 0;
+  background.resetTo(1);
+  buildCity();
   hole.reset(field);
+  hole.x = cityStart.x;
+  hole.y = cityStart.y;
   cam.x = hole.x;
   cam.y = hole.y;
   cam.zoom = CONFIG.camera.maxZoom;
-  levelPending = false;
+  rebuildPending = false;
   magnetT = 0;
   streakStep = 0;
   lastEatAt = -Infinity;
-  buildLevel(1);
   closeParentMenu();
 });
 
@@ -714,14 +760,16 @@ window.__hh = {
   get eaten() { return hud.score; },
   get remaining() { return activeThings(); },
   get holeR() { return hole.r; },
-  get level() { return hud.level; },
+  get cities() { return hud.trophies; },
+  get seed() { return citySeed; },
   get hole() { return { x: hole.x, y: hole.y, vx: hole.vx, vy: hole.vy, touching: hole.touching }; },
   get cam() { return { x: cam.x, y: cam.y, zoom: cam.zoom }; },
   get field() { return { w: field.w, h: field.h, mouth: hole.mouth }; },
+  get districts() { return Object.fromEntries(districtLeft); },
   get things() {
     const out = [];
     for (const th of things.items) {
-      if (th.active) out.push({ x: Math.round(th.x), y: Math.round(th.y), size: th.size, tier: th.tier, state: th.state });
+      if (th.active) out.push({ id: th.cityId, x: Math.round(th.x), y: Math.round(th.y), size: th.size, tier: th.tier, state: th.state, district: th.district });
     }
     return out;
   },

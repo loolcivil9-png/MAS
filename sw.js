@@ -17,7 +17,7 @@
 // Keep in step with CONFIG.version in js/config.js. Changing it makes the new
 // service worker install, drop the old cache, and take over — which is what
 // makes a freshly deployed version actually show up on the phone.
-const CACHE = 'hungry-hole-2.1.0';
+const CACHE = 'hungry-hole-3.0.0';
 
 // How long to wait for the network before falling back to the cached copy.
 const NETWORK_TIMEOUT = 2500;
@@ -30,7 +30,7 @@ const PRECACHE = [
   './js/main.js',
   './js/config.js',
   './js/util.js',
-  './js/catalog.js',
+  './js/city.js',
   './js/background.js',
   './js/hole.js',
   './js/thing.js',

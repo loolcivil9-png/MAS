@@ -9,6 +9,7 @@
    --------------------------------------------------------------------------- */
 
 import { TAU, rand, lerp, clamp, easeInOutSine, hsla } from './util.js';
+import { ROAD_YS, ROAD_WIDTH, AVENUE } from './city.js';
 
 const CLOUD_COUNT = 7;
 const STAR_COUNT = 70;
@@ -211,17 +212,25 @@ export class Background {
   }
 
   /**
-   * The ground the hole travels over, drawn in WORLD space under the camera.
-   * The sky above is fixed to the screen; these markings are what actually
-   * scroll, so they are what makes movement visible. Deterministic per grid
-   * cell — no allocation, no stored state, stable across frames.
+   * The city ground, drawn in WORLD space under the camera. The sky above is
+   * fixed to the screen; the ground is what actually scrolls, so it is what
+   * makes movement visible — and the roads are what make it read as a CITY.
+   * Deterministic — no allocation, no stored state, stable across frames.
    * @param {{x: number, y: number, w: number, h: number}} view visible world rect
    * @param {{w: number, h: number}} field world bounds
    */
   drawGround(ctx, view, field) {
     const p = this.palette();
-    const CELL = 240;
 
+    // --- the park lawn at the bottom of the city -----------------------------
+    const parkTop = field.h * 0.8;
+    if (view.y + view.h > parkTop) {
+      ctx.fillStyle = hsla(p.hillFar[0], p.hillFar[1], p.hillFar[2], 0.28);
+      ctx.fillRect(0, parkTop, field.w, field.h - parkTop);
+    }
+
+    // --- soft grassy blotches and pebbles, everywhere off the roads ----------
+    const CELL = 240;
     const x0 = Math.floor(view.x / CELL) - 1;
     const y0 = Math.floor(view.y / CELL) - 1;
     const x1 = Math.ceil((view.x + view.w) / CELL) + 1;
@@ -229,28 +238,53 @@ export class Background {
 
     for (let cy = y0; cy <= y1; cy++) {
       for (let cx = x0; cx <= x1; cx++) {
-        // Soft meadow blotches in the sky's own hill colour.
         const r1 = groundHash(cx, cy, 1);
         const bx = (cx + groundHash(cx, cy, 2)) * CELL;
         const by = (cy + groundHash(cx, cy, 3)) * CELL;
         if (bx > 0 && by > 0 && bx < field.w && by < field.h) {
           ctx.beginPath();
-          ctx.ellipse(bx, by, 40 + r1 * 90, (40 + r1 * 90) * 0.6, r1 * TAU, 0, TAU);
-          ctx.fillStyle = hsla(p.hillFar[0], p.hillFar[1], p.hillFar[2], 0.1 + r1 * 0.08);
+          ctx.ellipse(bx, by, 40 + r1 * 80, (40 + r1 * 80) * 0.6, r1 * TAU, 0, TAU);
+          ctx.fillStyle = hsla(p.hillFar[0], p.hillFar[1], p.hillFar[2], 0.08 + r1 * 0.06);
           ctx.fill();
         }
-
-        // A few crisp little dots — pebbles, daisies, snow, stars underfoot.
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 2; i++) {
           const dx = (cx + groundHash(cx, cy, 4 + i)) * CELL;
           const dy = (cy + groundHash(cx, cy, 7 + i)) * CELL;
           if (dx < 0 || dy < 0 || dx > field.w || dy > field.h) continue;
-          const dr = 3 + groundHash(cx, cy, 10 + i) * 4;
           ctx.beginPath();
-          ctx.arc(dx, dy, dr, 0, TAU);
-          ctx.fillStyle = hsla(p.cloud[0], p.cloud[1], p.cloud[2], 0.32);
+          ctx.arc(dx, dy, 3 + groundHash(cx, cy, 10 + i) * 4, 0, TAU);
+          ctx.fillStyle = hsla(p.cloud[0], p.cloud[1], p.cloud[2], 0.3);
           ctx.fill();
         }
+      }
+    }
+
+    // --- the roads ------------------------------------------------------------
+    const half = ROAD_WIDTH / 2;
+    ctx.fillStyle = 'rgba(64, 66, 92, 0.5)';
+    for (const yf of ROAD_YS) {
+      ctx.fillRect(0, field.h * yf - half, field.w, ROAD_WIDTH);
+    }
+    const ax = field.w * AVENUE.x;
+    ctx.fillRect(ax - half, field.h * AVENUE.y0, ROAD_WIDTH, field.h * (AVENUE.y1 - AVENUE.y0));
+
+    // Dashed centre lines, clipped to the visible stretch.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    const DASH = 44;
+    const GAP = 46;
+    for (const yf of ROAD_YS) {
+      const ry = field.h * yf;
+      if (ry < view.y - 20 || ry > view.y + view.h + 20) continue;
+      const from = Math.max(0, Math.floor(view.x / (DASH + GAP)) * (DASH + GAP));
+      for (let x = from; x < Math.min(field.w, view.x + view.w); x += DASH + GAP) {
+        ctx.fillRect(x, ry - 3.5, DASH, 7);
+      }
+    }
+    if (ax > view.x - 60 && ax < view.x + view.w + 60) {
+      const yStart = Math.max(field.h * AVENUE.y0, Math.floor(view.y / (DASH + GAP)) * (DASH + GAP));
+      const yEnd = Math.min(field.h * AVENUE.y1, view.y + view.h);
+      for (let y = yStart; y < yEnd; y += DASH + GAP) {
+        ctx.fillRect(ax - 3.5, y, 7, DASH);
       }
     }
 

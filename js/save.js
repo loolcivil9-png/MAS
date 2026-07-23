@@ -1,54 +1,45 @@
 /* ---------------------------------------------------------------------------
-   The world remembers him.
+   The city remembers him.
 
-   Things eaten, worlds finished and everything he has ever met all survive
-   between sessions, so coming back tomorrow means picking up where he left
-   off — not starting over.
+   Not just the totals — the CITY ITSELF is saved: its seed (which rebuilds
+   the identical layout), which things are already eaten, and how big the hole
+   has grown. Closing the app halfway through the market and opening it
+   tomorrow resumes exactly there. That matters, because with one big city and
+   deliberately slow growth, a session often ends mid-journey.
 
-   Two deliberate choices:
-
-   * Progress *within* a level is never saved — nor is the hole's size.
-     Every session opens on a fresh, full world with a small hole, which
-     guarantees a clean-plate win inside the first minutes of play.
-
-   * Every localStorage touch is wrapped in try/catch. Private browsing, a
-     full quota or storage being switched off all degrade silently to
-     session-only play.
-
-   Old Bubble Zoo saves (schema 1) are migrated on first load: his level and
-   trophies carry over, so the update never erases what he earned.
+   Every localStorage touch is wrapped in try/catch. Private browsing, a full
+   quota or storage being switched off all degrade silently to session-only
+   play. Older saves (Bubble Zoo v1, the levelled Hungry Hole v2) migrate so
+   his lifetime totals survive every update.
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
+import { CITY_KINDS } from './city.js';
 
 /** Bumped when the shape below changes, so old saves can be spotted. */
-const SCHEMA = 2;
+const SCHEMA = 3;
 
-/** Names of every thing he has eaten at least once. */
+/** Names of every kind of thing he has eaten at least once. */
 export const met = new Set();
 
-let getState = null;   // supplied by main.js: () => ({ totalEaten, level, trophies })
+let getState = null;   // supplied by main.js — see flushSave for the shape
 let dirty = false;
 let lastWrite = 0;
 
 /**
- * Reads the save. Returns `{ totalEaten, level, trophies }` if a valid one
- * exists, or null for a fresh start. Corrupt or future-schema saves are
- * discarded rather than allowed to crash the boot.
+ * Reads the save. Returns `{ totalEaten, cities, city }` where `city` is
+ * `{ seed, eaten: number[], holeR }` or null when a fresh city is needed.
+ * Corrupt or future-schema saves are discarded rather than crashing the boot.
  */
 export function loadSave() {
   try {
     const raw = localStorage.getItem(CONFIG.save.key);
     if (raw) {
       const s = JSON.parse(raw);
-      if (!s || s.v !== SCHEMA) return null;
-
-      const totalEaten = Math.max(0, Math.floor(Number(s.totalEaten) || 0));
-      const level = Math.max(1, Math.floor(Number(s.level) || 1));
-      const trophies = Math.max(0, Math.floor(Number(s.trophies) || 0));
-      if (Array.isArray(s.met)) for (const name of s.met) if (typeof name === 'string') met.add(name);
-
-      return { totalEaten, level, trophies };
+      if (!s) return null;
+      if (s.v === 3) return readV3(s);
+      if (s.v === 2) return migrateV2(s);
+      return null;
     }
     return migrateLegacy();
   } catch {
@@ -56,11 +47,36 @@ export function loadSave() {
   }
 }
 
-/**
- * A schema-1 save from the game this one replaced (Bubble Zoo). Level and
- * trophies carry straight over; popped bubbles become eaten things; the old
- * met-list is dropped because the cast changed completely.
- */
+function readV3(s) {
+  const totalEaten = Math.max(0, Math.floor(Number(s.totalEaten) || 0));
+  const cities = Math.max(0, Math.floor(Number(s.cities) || 0));
+  if (Array.isArray(s.met)) {
+    for (const name of s.met) if (typeof name === 'string' && CITY_KINDS.has(name)) met.add(name);
+  }
+
+  let city = null;
+  const c = s.city;
+  if (c && Number.isFinite(c.seed) && Array.isArray(c.eaten) && Number.isFinite(c.holeR)) {
+    city = {
+      seed: c.seed >>> 0,
+      eaten: c.eaten.filter((n) => Number.isInteger(n) && n >= 0),
+      holeR: Math.max(CONFIG.hole.baseRadius, Number(c.holeR)),
+    };
+  }
+  return { totalEaten, cities, city };
+}
+
+/** A v2 save from the levelled version: totals carry over, city starts fresh. */
+function migrateV2(s) {
+  dirty = true;
+  return {
+    totalEaten: Math.max(0, Math.floor(Number(s.totalEaten) || 0)),
+    cities: Math.max(0, Math.floor(Number(s.trophies) || 0)),
+    city: null,
+  };
+}
+
+/** A v1 save from Bubble Zoo, two games ago. His trophies still count. */
 function migrateLegacy() {
   try {
     const raw = localStorage.getItem(CONFIG.save.legacyKey);
@@ -69,13 +85,11 @@ function migrateLegacy() {
     if (!s || s.v !== 1) return null;
 
     localStorage.removeItem(CONFIG.save.legacyKey);
-    // The old key is gone; make sure the migrated state reaches the new key
-    // at the next flush even if he never eats anything this session.
     dirty = true;
     return {
       totalEaten: Math.max(0, Math.floor(Number(s.totalPops) || 0)),
-      level: Math.max(1, Math.floor(Number(s.level) || 1)),
-      trophies: Math.max(0, Math.floor(Number(s.trophies) || 0)),
+      cities: Math.max(0, Math.floor(Number(s.trophies) || 0)),
+      city: null,
     };
   } catch {
     return null;
@@ -104,13 +118,14 @@ export function markDirty() {
 export function flushSave() {
   if (!dirty || !getState) return;
   try {
+    // getState → { totalEaten, cities, citySeed, cityEaten: number[], holeR }
     const s = getState();
     localStorage.setItem(CONFIG.save.key, JSON.stringify({
       v: SCHEMA,
       totalEaten: s.totalEaten,
-      level: s.level,
-      trophies: s.trophies,
+      cities: s.cities,
       met: [...met],
+      city: { seed: s.citySeed, eaten: s.cityEaten, holeR: s.holeR },
     }));
     dirty = false;
     lastWrite = performance.now();
