@@ -120,7 +120,8 @@ const hole = new Hole();
 
 // Must comfortably exceed the city plan's thing count — a full pool silently
 // recycles the oldest live thing, which in a fixed city means losing pieces.
-const things = new Pool(220, () => new Thing());
+// The current plan is ~208 things; 300 leaves clear headroom.
+const things = new Pool(300, () => new Thing());
 
 let running = false;
 let started = false;

@@ -16,7 +16,7 @@ import { TAU, rand, clamp, easeInCubic, easeOutCubic, hsla } from './util.js';
 /* --- emoji sprite cache ------------------------------------------------------ */
 
 const sprites = new Map(); // "glyph@bucket" -> canvas (with .logicalDim)
-const OVERSAMPLE = 2;      // crisp on 2x phone screens
+const OVERSAMPLE = 3;      // razor-sharp even on the big buildings and the stadium
 const PADDING = 1.35;      // emoji glyphs overhang their em box; leave room
 
 function getSprite(glyph, size) {

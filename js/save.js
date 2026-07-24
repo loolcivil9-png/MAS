@@ -14,7 +14,7 @@
    --------------------------------------------------------------------------- */
 
 import { CONFIG } from './config.js';
-import { CITY_KINDS } from './city.js';
+import { CITY_KINDS, GEN_VERSION } from './city.js';
 
 /** Bumped when the shape below changes, so old saves can be spotted. */
 const SCHEMA = 3;
@@ -56,12 +56,19 @@ function readV3(s) {
 
   let city = null;
   const c = s.city;
-  if (c && Number.isFinite(c.seed) && Array.isArray(c.eaten) && Number.isFinite(c.holeR)) {
+  // Only resume a saved city if its layout matches the CURRENT generator — an
+  // old layout's eaten-id list would map onto different things and scramble
+  // the city. On a mismatch we drop the city (a fresh one is built) but keep
+  // every lifetime total, so an update never costs him his progress count.
+  if (c && c.gen === GEN_VERSION
+      && Number.isFinite(c.seed) && Array.isArray(c.eaten) && Number.isFinite(c.holeR)) {
     city = {
       seed: c.seed >>> 0,
       eaten: c.eaten.filter((n) => Number.isInteger(n) && n >= 0),
       holeR: Math.max(CONFIG.hole.baseRadius, Number(c.holeR)),
     };
+  } else if (c) {
+    dirty = true;   // rewrite the save in the new format at the next flush
   }
   return { totalEaten, cities, city };
 }
@@ -125,7 +132,7 @@ export function flushSave() {
       totalEaten: s.totalEaten,
       cities: s.cities,
       met: [...met],
-      city: { seed: s.citySeed, eaten: s.cityEaten, holeR: s.holeR },
+      city: { gen: GEN_VERSION, seed: s.citySeed, eaten: s.cityEaten, holeR: s.holeR },
     }));
     dirty = false;
     lastWrite = performance.now();

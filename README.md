@@ -47,11 +47,16 @@ because the small things live at the bottom and the big things at the top:
 | **Downtown** (top) | A block of big buildings — offices, the shop, the bank, the hotel, the church, the school |
 | **The stadium** | The one giant landmark at the very top. The last bite of all. |
 
-The ground is a proper top-down map: solid land, paved city blocks with
-kerbs, roads with centre dashes and zebra crossings, a lawn under the park —
-no floating scenery. Day slides into night as a light tint over the whole
-city. **The people of the city stroll about their day**, scatter with a comic
-"wheee!" when the hole rumbles close, and are always catchable.
+The ground is a proper, **detailed top-down cityscape**: paved blocks with
+kerbs, a tiled downtown plaza, a car park with painted bays and street trees,
+suburban garden strips and paths, striped market-stall awnings over the fruit,
+and a park with a pond, a winding path and flowerbed soil — none of it eatable,
+all of it drawn under the bright chunky things. Everything is **big and bold**
+(the camera sits close), the districts are laid out in **tidy grids and rows**,
+and there are ~200 things across the city. Day slides into night as a light
+tint over the whole scene. **The people of the city stroll about their day**,
+scatter with a comic "wheee!" when the hole rumbles close, and are always
+catchable.
 
 **Eating is physics, not an animation**: the pit's pull takes hold of a
 thing, it tips over as it slides in, and then it visibly sinks *below the

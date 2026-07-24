@@ -28,6 +28,12 @@
 
 import { CONFIG } from './config.js';
 
+/* The layout generation version. Bumped whenever the city plan below changes
+   in a way that renumbers things, so a saved half-eaten city from an older
+   layout is discarded (start fresh) rather than resolving its eaten-id list
+   against a different city. Lifetime totals always survive. */
+export const GEN_VERSION = 2;
+
 /* --- deterministic randomness ------------------------------------------------ */
 
 /** mulberry32 — tiny, fast, and identical on every device. */
@@ -44,19 +50,29 @@ export function makeRng(seed) {
 /* --- the cast ---------------------------------------------------------------- */
 
 const T = {
+  // --- tier 0: the tiny things, by the bedful ------------------------------
   flower: { glyph: '🌸', name: 'Flower' },
   tulip: { glyph: '🌷', name: 'Tulip' },
   daisy: { glyph: '🌼', name: 'Daisy' },
+  rose: { glyph: '🌹', name: 'Rose' },
+  hibiscus: { glyph: '🌺', name: 'Hibiscus' },
   apple: { glyph: '🍎', name: 'Apple' },
   orange: { glyph: '🍊', name: 'Orange' },
   strawberry: { glyph: '🍓', name: 'Strawberry' },
+  grapes: { glyph: '🍇', name: 'Grapes' },
+  lemon: { glyph: '🍋', name: 'Lemon' },
   ball: { glyph: '⚽', name: 'Ball', call: 'boing' },
+  balloon: { glyph: '🎈', name: 'Balloon', call: 'boing' },
   bird: { glyph: '🐦', name: 'Bird', call: 'tweet', runner: true },
+  pigeon: { glyph: '🐦‍⬛', name: 'Pigeon', call: 'tweet', runner: true },
 
+  // --- tier 1: small props and all the people ------------------------------
   box: { glyph: '📦', name: 'Box' },
   basket: { glyph: '🧺', name: 'Basket' },
   light: { glyph: '🚦', name: 'Traffic light' },
   barrier: { glyph: '🚧', name: 'Barrier' },
+  hydrant: { glyph: '🧯', name: 'Hydrant' },
+  lamp: { glyph: '🪔', name: 'Lamp' },
   dog: { glyph: '🐕', name: 'Dog', call: 'woof', runner: true },
   cat: { glyph: '🐈', name: 'Cat', call: 'meow', runner: true },
 
@@ -70,32 +86,49 @@ const T = {
   jogger: { glyph: '🏃', name: 'Jogger', call: 'whee', runner: true, wander: true },
   officer: { glyph: '👮', name: 'Police officer', call: 'whee', runner: true, wander: true },
   builder: { glyph: '👷', name: 'Builder', call: 'whee', runner: true, wander: true },
+  farmer: { glyph: '🧑‍🌾', name: 'Farmer', call: 'whee', runner: true, wander: true },
+  baby: { glyph: '👶', name: 'Baby', call: 'whee', runner: true, wander: true },
 
+  // --- tier 2: bench-and-scooter sized ------------------------------------
   chair: { glyph: '🪑', name: 'Chair' },
+  bench: { glyph: '🛋️', name: 'Bench' },
   trolley: { glyph: '🛒', name: 'Trolley' },
   scooter: { glyph: '🛵', name: 'Scooter', call: 'vroom' },
+  bike: { glyph: '🚲', name: 'Bike' },
   melon: { glyph: '🍉', name: 'Watermelon', call: 'crunch' },
   littleTree: { glyph: '🌲', name: 'Little tree', call: 'crunch' },
   postbox: { glyph: '📮', name: 'Postbox' },
+  umbrella: { glyph: '⛱️', name: 'Sun umbrella' },
 
+  // --- tier 3: cars and trees ---------------------------------------------
   car: { glyph: '🚗', name: 'Car', call: 'vroom' },
   taxi: { glyph: '🚕', name: 'Taxi', call: 'vroom' },
+  suv: { glyph: '🚙', name: 'Jeep', call: 'vroom' },
+  police: { glyph: '🚓', name: 'Police car', call: 'vroom' },
   fountain: { glyph: '⛲', name: 'Fountain', call: 'splash' },
   tree: { glyph: '🌳', name: 'Tree', call: 'crunch' },
+  palm: { glyph: '🌴', name: 'Palm tree', call: 'crunch' },
 
+  // --- tier 4: homes and big vehicles -------------------------------------
   house: { glyph: '🏠', name: 'House' },
   cottage: { glyph: '🏡', name: 'Cottage' },
   bus: { glyph: '🚌', name: 'Bus', call: 'vroom' },
   truck: { glyph: '🚚', name: 'Truck', call: 'vroom' },
   fireTruck: { glyph: '🚒', name: 'Fire truck', call: 'vroom' },
+  ambulance: { glyph: '🚑', name: 'Ambulance', call: 'vroom' },
 
+  // --- tier 5: the downtown skyline ---------------------------------------
   office: { glyph: '🏢', name: 'Office' },
   shop: { glyph: '🏬', name: 'Shop' },
   bank: { glyph: '🏦', name: 'Bank' },
   hotel: { glyph: '🏨', name: 'Hotel' },
   church: { glyph: '⛪', name: 'Church' },
   school: { glyph: '🏫', name: 'School' },
+  hospital: { glyph: '🏥', name: 'Hospital' },
+  factory: { glyph: '🏭', name: 'Factory' },
+  castle: { glyph: '🏰', name: 'Castle', call: 'magic' },
 
+  // --- tier 6: the one landmark -------------------------------------------
   stadium: { glyph: '🏟️', name: 'Stadium', call: 'magic' },
 };
 
@@ -188,94 +221,121 @@ export function generateCity(seed) {
       add(entry, tier, district, cx + Math.cos(a) * d, cy + Math.sin(a) * d);
     }
   };
+  /**
+   * A tidy aligned block — cols × rows of the same thing on a clean grid,
+   * centred on (cx, cy). This is what makes a district read as ORGANIZED: a
+   * proper flower field, a car park in neat bays, a downtown grid of towers.
+   */
+  const grid = (entry, tier, district, cx, cy, cols, rows, dx, dy) => {
+    const x0 = cx - ((cols - 1) / 2) * dx;
+    const y0 = cy - ((rows - 1) / 2) * dy;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        add(entry, tier, district, x0 + c * dx + jit(6), y0 + r * dy + jit(6));
+      }
+    }
+  };
 
   /* --- PARK (bottom): where a small hole begins ---------------------------- */
-  row(T.flower, 0, 'park', W * 0.5, H * 0.845, 7, W * 0.11, 40);
-  row(T.daisy, 0, 'park', W * 0.36, H * 0.9, 6, W * 0.09);
-  row(T.tulip, 0, 'park', W * 0.5, H * 0.965, 7, W * 0.11, -40);
-  cluster(T.daisy, 0, 'park', W * 0.16, H * 0.9, 5, 90);
-  cluster(T.flower, 0, 'park', W * 0.85, H * 0.93, 5, 90);
-  cluster(T.ball, 0, 'park', W * 0.82, H * 0.875, 3, 80);
-  cluster(T.bird, 0, 'park', W * 0.66, H * 0.925, 3, 110);
-  add(T.boy, 1, 'park', W * 0.3, H * 0.87);
-  add(T.girl, 1, 'park', W * 0.68, H * 0.88);
-  add(T.boy, 1, 'park', W * 0.42, H * 0.94);
-  add(T.girl, 1, 'park', W * 0.6, H * 0.955);
-  row(T.chair, 2, 'park', W * 0.24, H * 0.955, 2, 110);
-  row(T.chair, 2, 'park', W * 0.78, H * 0.955, 2, 110);
-  add(T.tree, 3, 'park', W * 0.09 + jit(), H * 0.86 + jit());
-  add(T.tree, 3, 'park', W * 0.91 + jit(), H * 0.845 + jit());
-  add(T.tree, 3, 'park', W * 0.13 + jit(), H * 0.975 + jit());
-  add(T.fountain, 3, 'park', W * 0.5, H * 0.93);
+  // A proper flower field in tidy beds, plus playthings and park life.
+  grid(T.flower, 0, 'park', W * 0.28, H * 0.9, 4, 3, W * 0.07, H * 0.028);
+  grid(T.tulip, 0, 'park', W * 0.72, H * 0.9, 4, 3, W * 0.07, H * 0.028);
+  grid(T.daisy, 0, 'park', W * 0.5, H * 0.965, 5, 2, W * 0.075, H * 0.022);
+  cluster(T.rose, 0, 'park', W * 0.14, H * 0.955, 4, 90);
+  cluster(T.hibiscus, 0, 'park', W * 0.86, H * 0.955, 4, 90);
+  row(T.ball, 0, 'park', W * 0.5, H * 0.84, 3, W * 0.08);
+  cluster(T.bird, 0, 'park', W * 0.2, H * 0.86, 3, 100);
+  cluster(T.pigeon, 0, 'park', W * 0.8, H * 0.86, 3, 100);
+  add(T.boy, 1, 'park', W * 0.34, H * 0.87);
+  add(T.girl, 1, 'park', W * 0.66, H * 0.87);
+  add(T.baby, 1, 'park', W * 0.5, H * 0.885);
+  add(T.dog, 1, 'park', W * 0.42, H * 0.945);
+  row(T.bench, 2, 'park', W * 0.22, H * 0.9, 2, H * 0.05);
+  row(T.bench, 2, 'park', W * 0.78, H * 0.9, 2, H * 0.05);
+  add(T.tree, 3, 'park', W * 0.08, H * 0.86);
+  add(T.tree, 3, 'park', W * 0.92, H * 0.86);
+  add(T.palm, 3, 'park', W * 0.1, H * 0.96);
+  add(T.palm, 3, 'park', W * 0.9, H * 0.96);
+  add(T.fountain, 3, 'park', W * 0.5, H * 0.915);
 
-  /* --- MARKET: fruit by the boxful ----------------------------------------- */
-  cluster(T.apple, 0, 'market', W * 0.17, H * 0.665, 4, 80);
-  cluster(T.orange, 0, 'market', W * 0.5, H * 0.655, 4, 80);
-  cluster(T.strawberry, 0, 'market', W * 0.83, H * 0.665, 4, 80);
-  row(T.box, 1, 'market', W * 0.32, H * 0.72, 5, W * 0.09);
-  row(T.basket, 1, 'market', W * 0.72, H * 0.755, 4, W * 0.1);
-  cluster(T.melon, 2, 'market', W * 0.15, H * 0.75, 3, 90);
-  row(T.trolley, 2, 'market', W * 0.5, H * 0.775, 3, W * 0.1);
-  add(T.scooter, 2, 'market', W * 0.88, H * 0.7 + jit());
-  add(T.scooter, 2, 'market', W * 0.09, H * 0.69 + jit());
-  add(T.cat, 1, 'market', W * 0.35, H * 0.675);
-  add(T.cat, 1, 'market', W * 0.62, H * 0.74);
-  add(T.woman, 1, 'market', W * 0.25, H * 0.7);
-  add(T.woman, 1, 'market', W * 0.6, H * 0.685);
-  add(T.man, 1, 'market', W * 0.78, H * 0.73);
+  /* --- MARKET: fruit by the stallful --------------------------------------- */
+  // Three stalls, each a tidy crate of fruit with a keeper — see drawGround,
+  // which paints an awning + table under each of these three centres.
+  grid(T.apple, 0, 'market', W * 0.2, H * 0.66, 3, 3, W * 0.045, H * 0.02);
+  grid(T.orange, 0, 'market', W * 0.5, H * 0.66, 3, 3, W * 0.045, H * 0.02);
+  grid(T.strawberry, 0, 'market', W * 0.8, H * 0.66, 3, 3, W * 0.045, H * 0.02);
+  cluster(T.grapes, 0, 'market', W * 0.35, H * 0.72, 3, 70);
+  cluster(T.lemon, 0, 'market', W * 0.65, H * 0.72, 3, 70);
+  row(T.box, 1, 'market', W * 0.24, H * 0.75, 4, W * 0.06);
+  row(T.basket, 1, 'market', W * 0.76, H * 0.75, 4, W * 0.06);
+  row(T.trolley, 2, 'market', W * 0.5, H * 0.775, 4, W * 0.08);
+  row(T.melon, 2, 'market', W * 0.16, H * 0.7, 2, W * 0.06);
+  row(T.umbrella, 2, 'market', W * 0.84, H * 0.7, 2, W * 0.06);
+  add(T.scooter, 2, 'market', W * 0.09, H * 0.78);
+  add(T.scooter, 2, 'market', W * 0.91, H * 0.78);
+  add(T.cat, 1, 'market', W * 0.4, H * 0.7);
+  add(T.cat, 1, 'market', W * 0.6, H * 0.7);
+  add(T.woman, 1, 'market', W * 0.28, H * 0.63);
+  add(T.woman, 1, 'market', W * 0.72, H * 0.63);
+  add(T.farmer, 1, 'market', W * 0.5, H * 0.63);
 
-  /* --- LITTLE HOUSES: a tidy grid of homes --------------------------------- */
-  for (const [i, hx] of [0.16, 0.5, 0.84].entries()) {
-    add(i % 2 ? T.house : T.cottage, 4, 'houses', W * hx, H * 0.485 + jit());
-    add(i % 2 ? T.cottage : T.house, 4, 'houses', W * hx, H * 0.575 + jit());
-  }
-  row(T.littleTree, 2, 'houses', W * 0.33, H * 0.53, 3, W * 0.09);
-  row(T.littleTree, 2, 'houses', W * 0.67, H * 0.53, 2, W * 0.09);
-  add(T.postbox, 2, 'houses', W * 0.28, H * 0.475 + jit());
-  add(T.postbox, 2, 'houses', W * 0.72, H * 0.585 + jit());
-  add(T.dog, 1, 'houses', W * 0.42, H * 0.56);
-  add(T.dog, 1, 'houses', W * 0.58, H * 0.5);
-  add(T.man, 1, 'houses', W * 0.36, H * 0.59);
-  add(T.woman, 1, 'houses', W * 0.64, H * 0.47);
-  cluster(T.tulip, 0, 'houses', W * 0.14, H * 0.475, 4, 70);
-  cluster(T.flower, 0, 'houses', W * 0.86, H * 0.59, 4, 70);
-  add(T.car, 3, 'houses', W * 0.08, H * 0.53 + jit());
-  add(T.car, 3, 'houses', W * 0.92, H * 0.53 + jit());
+  /* --- LITTLE HOUSES: a tidy suburban grid --------------------------------- */
+  grid(T.house, 4, 'houses', W * 0.5, H * 0.5, 3, 2, W * 0.26, H * 0.08);
+  grid(T.cottage, 4, 'houses', W * 0.5, H * 0.54, 2, 1, W * 0.52, 0);
+  // Front-garden flowers and a lined path of little trees.
+  row(T.littleTree, 2, 'houses', W * 0.5, H * 0.47, 5, W * 0.12);
+  row(T.littleTree, 2, 'houses', W * 0.5, H * 0.58, 5, W * 0.12);
+  cluster(T.tulip, 0, 'houses', W * 0.16, H * 0.5, 4, 70);
+  cluster(T.flower, 0, 'houses', W * 0.84, H * 0.5, 4, 70);
+  add(T.postbox, 2, 'houses', W * 0.26, H * 0.55);
+  add(T.postbox, 2, 'houses', W * 0.74, H * 0.55);
+  add(T.dog, 1, 'houses', W * 0.4, H * 0.56);
+  add(T.dog, 1, 'houses', W * 0.6, H * 0.48);
+  add(T.man, 1, 'houses', W * 0.34, H * 0.52);
+  add(T.woman, 1, 'houses', W * 0.66, H * 0.52);
+  add(T.bike, 2, 'houses', W * 0.12, H * 0.55);
+  add(T.bike, 2, 'houses', W * 0.88, H * 0.55);
+  add(T.suv, 3, 'houses', W * 0.1, H * 0.48);
+  add(T.police, 3, 'houses', W * 0.9, H * 0.48);
 
-  /* --- BUSY STREETS: ranks of parked traffic and people on the pavement ---- */
-  row(T.car, 3, 'streets', W * 0.25, H * 0.295, 5, W * 0.1);
-  row(T.taxi, 3, 'streets', W * 0.75, H * 0.295, 5, W * 0.1);
-  row(T.car, 3, 'streets', W * 0.3, H * 0.345, 4, W * 0.11);
-  row(T.taxi, 3, 'streets', W * 0.76, H * 0.345, 3, W * 0.11);
-  row(T.bus, 4, 'streets', W * 0.3, H * 0.395, 2, W * 0.26);
-  row(T.truck, 4, 'streets', W * 0.74, H * 0.395, 2, W * 0.22);
-  add(T.fireTruck, 4, 'streets', W * 0.5, H * 0.37 + jit());
-  row(T.light, 1, 'streets', W * 0.5, H * 0.256, 5, W * 0.19);
-  cluster(T.barrier, 1, 'streets', W * 0.42, H * 0.418, 4, 80);
-  add(T.builder, 1, 'streets', W * 0.36, H * 0.42);
-  add(T.builder, 1, 'streets', W * 0.49, H * 0.428);
-  add(T.walker, 1, 'streets', W * 0.14, H * 0.33);
-  add(T.walker, 1, 'streets', W * 0.86, H * 0.33);
-  add(T.walker, 1, 'streets', W * 0.55, H * 0.31);
-  add(T.jogger, 1, 'streets', W * 0.2, H * 0.4);
-  add(T.jogger, 1, 'streets', W * 0.68, H * 0.42);
-  add(T.officer, 1, 'streets', W * 0.5, H * 0.27);
+  /* --- BUSY STREETS: a full car park and busy pavements -------------------- */
+  // Two neat ranks of cars and taxis in painted bays (drawGround lines them).
+  grid(T.car, 3, 'streets', W * 0.28, H * 0.31, 3, 2, W * 0.1, H * 0.045);
+  grid(T.taxi, 3, 'streets', W * 0.72, H * 0.31, 3, 2, W * 0.1, H * 0.045);
+  row(T.suv, 3, 'streets', W * 0.5, H * 0.29, 2, W * 0.12);
+  row(T.bus, 4, 'streets', W * 0.3, H * 0.4, 2, W * 0.24);
+  row(T.truck, 4, 'streets', W * 0.72, H * 0.4, 2, W * 0.2);
+  add(T.fireTruck, 4, 'streets', W * 0.4, H * 0.37);
+  add(T.ambulance, 4, 'streets', W * 0.6, H * 0.37);
+  row(T.light, 1, 'streets', W * 0.5, H * 0.258, 5, W * 0.17);
+  row(T.barrier, 1, 'streets', W * 0.4, H * 0.42, 3, W * 0.06);
+  row(T.hydrant, 1, 'streets', W * 0.72, H * 0.42, 2, W * 0.08);
+  add(T.builder, 1, 'streets', W * 0.34, H * 0.42);
+  add(T.builder, 1, 'streets', W * 0.5, H * 0.43);
+  add(T.walker, 1, 'streets', W * 0.12, H * 0.34);
+  add(T.walker, 1, 'streets', W * 0.88, H * 0.34);
+  add(T.jogger, 1, 'streets', W * 0.16, H * 0.4);
+  add(T.jogger, 1, 'streets', W * 0.84, H * 0.4);
+  add(T.officer, 1, 'streets', W * 0.5, H * 0.34);
 
-  /* --- DOWNTOWN: the block of big buildings -------------------------------- */
-  row(T.office, 5, 'downtown', W * 0.24, H * 0.125, 2, W * 0.24);
-  add(T.shop, 5, 'downtown', W * 0.76 + jit(), H * 0.125 + jit());
-  add(T.bank, 5, 'downtown', W * 0.18 + jit(), H * 0.205 + jit());
-  add(T.hotel, 5, 'downtown', W * 0.5 + jit(), H * 0.21 + jit());
-  add(T.church, 5, 'downtown', W * 0.82 + jit(), H * 0.205 + jit());
-  row(T.school, 5, 'downtown', W * 0.5, H * 0.155, 1, 0);
+  /* --- DOWNTOWN: a grid of towers ------------------------------------------ */
+  grid(T.office, 5, 'downtown', W * 0.5, H * 0.13, 3, 2, W * 0.28, H * 0.06);
+  add(T.bank, 5, 'downtown', W * 0.22, H * 0.2);
+  add(T.hotel, 5, 'downtown', W * 0.5, H * 0.2);
+  add(T.hospital, 5, 'downtown', W * 0.78, H * 0.2);
+  add(T.shop, 5, 'downtown', W * 0.28, H * 0.09);
+  add(T.church, 5, 'downtown', W * 0.72, H * 0.09);
+  add(T.school, 5, 'downtown', W * 0.5, H * 0.16);
+  add(T.factory, 5, 'downtown', W * 0.12, H * 0.14);
+  add(T.castle, 5, 'downtown', W * 0.88, H * 0.14);
 
   /* --- THE STADIUM: the last bite of all ----------------------------------- */
-  add(T.stadium, 6, null, W * 0.5, H * 0.055);
+  add(T.stadium, 6, null, W * 0.5, H * 0.045);
 
   /* --- specials ------------------------------------------------------------- */
   const pickFrom = (pool) => pool[(rng() * pool.length) | 0];
   const tinies = things.filter((t) => t.tier <= 1);
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) {
     const t = pickFrom(tinies);
     if (!t.golden) t.golden = true;
   }
@@ -287,6 +347,6 @@ export function generateCity(seed) {
 
   return {
     things,
-    start: { x: W * 0.5, y: H * 0.885 },
+    start: { x: W * 0.5, y: H * 0.9 },
   };
 }

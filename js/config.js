@@ -8,7 +8,7 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '3.2.0',
+  version: '3.3.0',
 
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Hungry Hole". */
@@ -32,17 +32,18 @@ export const CONFIG = {
      generator, so the same seed always rebuilds the same city — which is how
      a half-eaten city can be saved and resumed. */
   city: {
-    width: 1600,           // fixed world size in logical units, independent of
-    height: 3200,          // the screen — a portrait city about 2 by 4 screens
+    width: 2100,           // fixed world size in logical units, independent of
+    height: 4200,          // the screen — a big portrait city, roomy enough for
+                           // the bigger, denser assets to sit tidily
     growthExp: 1.3,        // growth shares scale with size^this. Above 1 means
                            // small things give little growth, so each new size
                            // takes a satisfying while to reach
   },
   camera: {
-    holeScreenFrac: 0.07,  // the hole tries to appear this fraction of screen height
-    minZoom: 0.42,         // fully grown: see this much more world (smaller = wider)
-    maxZoom: 0.8,          // starting view is already pulled back — the city
-                           // should feel like a place, not a close-up
+    holeScreenFrac: 0.1,   // the hole tries to appear this fraction of screen
+                           // height — bigger than before, so things read large
+    minZoom: 0.5,          // fully grown: see this much more world (smaller = wider)
+    maxZoom: 0.92,         // starting view is close and chunky, not a far-off map
     posK: 5.5,             // how snappily the camera catches up to the hole
     zoomK: 2.2,            // how smoothly the zoom glides between sizes
     lookAhead: 0.22,       // seconds of velocity the camera leads by
@@ -75,7 +76,7 @@ export const CONFIG = {
      hole's direction and speed, wherever on the glass the finger happens to
      be. Hold still and the hole eases to a stop; let go and it glides out. */
   hole: {
-    baseRadius: 20,        // how small it starts in a fresh city: only the very
+    baseRadius: 29,        // how small it starts in a fresh city: only the very
                            // tiniest things fit at first
     mouthRatio: 1.0,       // a thing fits when its size <= hole radius * this
     maxSpeed: 560,         // world units per second, plus a little as it grows
@@ -90,10 +91,10 @@ export const CONFIG = {
 
   /* --- the things it eats -------------------------------------------------- */
   things: {
-    // Seven sizes, flowers to stadium. The last one is the landmark.
-    // Deliberately small against the screen: the city should read as a busy
-    // place seen from above, not a wall of stickers.
-    tierSizes: [16, 26, 38, 54, 76, 105, 140],
+    // Seven sizes, flowers to stadium. The last one is the landmark. Big and
+    // bold against the screen so everything is chunky and exciting, while the
+    // camera zoom keeps the whole busy city readable.
+    tierSizes: [24, 38, 56, 80, 112, 150, 200],
     overlapFactor: 1.0,    // eating starts when the hole's edge reaches a thing...
     thingHit: 0.8,         // ...this deep into its body. Generous on purpose:
                            // he aims AT things, he does not centre on them

@@ -17,7 +17,7 @@
 // Keep in step with CONFIG.version in js/config.js. Changing it makes the new
 // service worker install, drop the old cache, and take over — which is what
 // makes a freshly deployed version actually show up on the phone.
-const CACHE = 'hungry-hole-3.2.0';
+const CACHE = 'hungry-hole-3.3.0';
 
 // How long to wait for the network before falling back to the cached copy.
 const NETWORK_TIMEOUT = 2500;
