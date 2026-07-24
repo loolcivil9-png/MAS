@@ -76,6 +76,8 @@ export class Thing {
     this.fleeVy = 0;
     this.headA = rand(0, TAU);   // wanderers stroll in this direction...
     this.headT = 0;              // ...and change their mind when this runs out
+    this.leanX = 0;              // visual tug toward the hole as it nears
+    this.leanY = 0;
 
     this.swallowT = 0;
     this.depth = 0;              // 0 above ground .. 1 fully down the hole
@@ -150,6 +152,21 @@ export class Thing {
 
     if (this.wander) this.#stroll(dt, bounds);
     if (this.runner) this.#flee(dt, bounds, hole);
+
+    // Anticipation: as the hole nears, the thing leans toward it — a nervous
+    // little tug, purely visual (never touches x/y), so eating distances and
+    // the saved city stay exact.
+    const R = CONFIG.juice.leanRadius;
+    const dx = hole.x - this.x;
+    const dy = hole.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const pull = dist < R ? (1 - dist / R) ** 2 : 0;
+    const want = this.size * 0.22 * pull;
+    const tx = (dx / dist) * want;
+    const ty = (dy / dist) * want;
+    const k = 1 - Math.exp(-6 * dt);
+    this.leanX += (tx - this.leanX) * k;
+    this.leanY += (ty - this.leanY) * k;
 
     return null;
   }
@@ -233,19 +250,33 @@ export class Thing {
 
     if (scale <= 0.01) return;
 
+    const J = CONFIG.juice;
     const dim = this.sprite.logicalDim;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(this.x, this.y + sinkY);
 
-    // Ground shadow, drawn unrotated so it stays under the thing.
+    // --- the drop-shadow, on the ground, offset away from the sun. Longer for
+    // taller things (buildings loom), so the whole city reads as 3-D. Drawn in
+    // world space before the lean, so it stays anchored under the thing.
     if (this.state !== 'swallow') {
+      const lift = this.size * (0.32 + this.tier * 0.16) * scale;
+      const sx = this.x - J.shadowLightX * lift;
+      const sy = this.y - J.shadowLightY * lift + this.size * 0.4 * scale;
+      const rx = this.size * (0.62 + this.tier * 0.05) * scale;
+      const ry = rx * 0.42;
+      ctx.save();
+      ctx.fillStyle = `rgba(20, 24, 40, ${J.shadowStrength * 0.5})`;
       ctx.beginPath();
-      ctx.ellipse(0, this.size * 0.82 * scale, this.size * 0.66 * scale, this.size * 0.16 * scale, 0, 0, TAU);
-      ctx.fillStyle = 'rgba(28, 18, 66, 0.16)';
+      ctx.ellipse(sx, sy, rx * 1.25, ry * 1.25, 0, 0, TAU);
       ctx.fill();
+      ctx.fillStyle = `rgba(20, 24, 40, ${J.shadowStrength})`;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, rx, ry, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
     }
 
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(this.x + this.leanX, this.y + this.leanY + sinkY);
     ctx.rotate(rot);
     ctx.scale(scale, scale);
     if (this.golden) this.#drawGlow(ctx, 46, 0.4);

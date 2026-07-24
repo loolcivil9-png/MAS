@@ -58,6 +58,22 @@ thing, it tips over as it slides in, and then it visibly sinks *below the
 rim*, clipped inside the darkness — with a wet, throaty *glup* built like a
 real swallow (click, glide, thump), pitched deeper the bigger the bite.
 
+### Game feel
+
+The polish that makes it land as a real game, not a toy — all of it pure
+juice, and all of it in [`js/config.js`](js/config.js) under `juice`:
+
+- **Drop-shadows** on everything, offset from a single light, longer for
+  taller things — so the buildings loom and the whole city reads as 3-D
+- **A vacuum vortex** spiralling in the hole's throat: it always looks hungry
+- **Screen shake** with a size-scaled kick when big things go down, a bigger
+  jolt when a district falls, the biggest when the whole city goes — clamped
+  so it delights and never nauseates
+- **Dust** kicked up at the rim on every swallow, for weight
+- **Combo numbers** that pop and rise over the hole as the eat-streak climbs
+- **Anticipation**: things lean toward the hole as it approaches (visual only)
+- A soft **vignette** and a cinematic **zoom-punch** when a city is finished
+
 Things come in **armies** — a bed of seven flowers, a row of four parked
 cars, a block of six buildings — because a line of the same thing begs to be
 hoovered up in one glorious pass. Real roads with dashed centre lines run

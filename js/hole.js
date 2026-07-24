@@ -158,15 +158,36 @@ export class Hole {
     ctx.fillStyle = body;
     ctx.fill();
 
-    // --- slowly turning interior swirls: the hole is *deep* ------------------
-    for (let i = 0; i < 3; i++) {
-      const a = this.t * (0.9 + i * 0.35) + i * 2.1;
+    // --- the vortex: a hungry whirlpool spiralling inward --------------------
+    // Six arms, each a spiral drawn as a short arc chain that tightens toward
+    // the centre and rotates, so the hole always looks like it is *pulling*.
+    const spin = this.t * 2.4;
+    for (let arm = 0; arm < 6; arm++) {
+      const base = spin + (arm / 6) * TAU;
       ctx.beginPath();
-      ctx.ellipse(0, 0, r * (0.3 + i * 0.2), r * (0.3 + i * 0.2) * 0.82, 0, a, a + 2.2);
-      ctx.strokeStyle = `rgba(110, 88, 190, ${0.22 - i * 0.05})`;
-      ctx.lineWidth = r * 0.055;
+      for (let s = 0; s <= 10; s++) {
+        const f = s / 10;
+        const rad = r * (0.92 - f * 0.82);           // tightens toward the middle
+        const ang = base + f * 2.6;                  // and winds around as it goes
+        const px = Math.cos(ang) * rad;
+        const py = Math.sin(ang) * rad * 0.82;
+        if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = `rgba(120, 96, 205, ${0.16 + 0.06 * Math.sin(spin + arm)})`;
+      ctx.lineWidth = r * 0.04;
+      ctx.lineCap = 'round';
       ctx.stroke();
     }
+
+    // A bright hungry pinpoint at the very throat, breathing.
+    const glow = r * (0.1 + 0.04 * Math.sin(this.t * 5));
+    const throat = ctx.createRadialGradient(0, 0, 0, 0, 0, glow * 3);
+    throat.addColorStop(0, 'rgba(150, 120, 255, 0.5)');
+    throat.addColorStop(1, 'rgba(150, 120, 255, 0)');
+    ctx.fillStyle = throat;
+    ctx.beginPath();
+    ctx.arc(0, 0, glow * 3, 0, TAU);
+    ctx.fill();
 
     ctx.restore();
   }

@@ -8,7 +8,7 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '3.1.0',
+  version: '3.2.0',
 
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Hungry Hole". */
@@ -53,6 +53,21 @@ export const CONFIG = {
      sunset, night, dawn and round again while he plays. */
   sky: {
     secondsPerPhase: 150,
+  },
+
+  /* --- game feel (juice) --------------------------------------------------- */
+  /* The weight and sparkle that make it feel like a real game. All of this is
+     pure polish — turn any of it down to zero and the game plays identically. */
+  juice: {
+    shadowLightX: -0.5,    // where the sun is: shadows fall opposite this...
+    shadowLightY: -0.7,    // (up-left sun → shadows down-right)
+    shadowStrength: 0.22,  // how dark the drop-shadows are
+    shakeBigTier: 4,       // eating a thing this size or bigger shakes the screen
+    shakeDecay: 9,         // how fast a shake settles (higher = snappier)
+    shakeMax: 26,          // hard cap on shake, in logical units, so it never nauseates
+    leanRadius: 320,       // idle things within this of the hole lean toward it
+    comboFrom: 3,          // the eat-streak number pops up from this step on
+    vignette: 0.22,        // how much the screen corners darken (0 = off)
   },
 
   /* --- the hole ------------------------------------------------------------ */

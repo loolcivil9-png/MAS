@@ -15,6 +15,7 @@ const CONFETTI = 1;
 const SPARK = 2;
 const RING = 3;
 const SHARD = 4;
+const DUST = 5;
 
 const makeParticle = () => ({
   active: false,
@@ -118,6 +119,32 @@ export class Particles {
     }
   }
 
+  /**
+   * A puff of dust kicked up as a thing drops down the hole — the weight that
+   * makes a swallow feel like it landed. Bigger things throw more, wider.
+   */
+  dustPuff(x, y, size) {
+    const n = Math.round(4 + size * 0.06);
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, TAU);
+      const speed = rand(30, 60) + size * 0.5;
+      const p = this.pool.acquire();
+      p.active = true;
+      p.type = DUST;
+      p.x = x + Math.cos(a) * size * 0.3;
+      p.y = y + Math.sin(a) * size * 0.2;
+      p.vx = Math.cos(a) * speed;
+      p.vy = Math.sin(a) * speed * 0.6 - rand(10, 40);
+      p.maxLife = p.life = rand(0.35, 0.7);
+      p.size = rand(size * 0.2, size * 0.4);
+      // A dull, dusty brown-grey — deliberately not a bright particle.
+      p.hue = rand(28, 42); p.sat = 18; p.lum = rand(58, 74);
+      p.grav = 40;
+      p.drag = 0.9;
+      p.rot = 0; p.vrot = 0;
+    }
+  }
+
   /** One firework burst. Additive sparks that arc and fade. */
   firework(x, y, hue, count = CONFIG.particles.fireworkSparks) {
     this.ringWave(x, y, hue, 10, 260, 0.55);
@@ -178,6 +205,7 @@ export class Particles {
       if (p.type === CONFETTI) this.#drawConfetti(ctx, p);
       else if (p.type === SHARD) this.#drawShard(ctx, p);
       else if (p.type === RING) this.#drawRing(ctx, p);
+      else if (p.type === DUST) this.#drawDust(ctx, p);
     }
 
     // Pass 2: additive, so overlapping glitter blooms white instead of muddying.
@@ -238,6 +266,16 @@ export class Particles {
     ctx.fillStyle = hsla(p.hue, p.sat, p.lum, alpha);
     ctx.fillRect(-p.size * 0.35, -p.size * 0.5, p.size * 0.7, p.size);
     ctx.restore();
+  }
+
+  #drawDust(ctx, p) {
+    const t = p.life / p.maxLife;
+    // Grows as it puffs out, fading — a soft cloud, not a hard dot.
+    const r = p.size * (1.4 - t * 0.6);
+    ctx.fillStyle = hsla(p.hue, p.sat, p.lum, t * 0.4);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, TAU);
+    ctx.fill();
   }
 
   #drawShard(ctx, p) {

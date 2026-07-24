@@ -20,8 +20,8 @@
    where the finger sits on the glass is irrelevant.
    --------------------------------------------------------------------------- */
 
-import { CONFIG } from './config.js';
-import { TAU, Pool, Timers, clamp, rand } from './util.js';
+import { CONFIG, uiFont } from './config.js';
+import { TAU, Pool, Timers, clamp, rand, hsla } from './util.js';
 import { Background } from './background.js';
 import { Hole } from './hole.js';
 import { Thing } from './thing.js';
@@ -78,7 +78,9 @@ function updateCamera(dt) {
 
   // Zoom keeps the hole a steady fraction of the screen: growing pulls the
   // camera back, so the world visibly "gets smaller" — the hole.io feeling.
-  const zt = clamp((world.h * C.holeScreenFrac) / hole.rShown, C.minZoom, C.maxZoom);
+  // A zoom-punch briefly leans in for a cinematic beat, then relaxes.
+  zoomPunch *= Math.exp(-4 * dt);
+  const zt = clamp((world.h * C.holeScreenFrac) / hole.rShown, C.minZoom, C.maxZoom) * (1 + zoomPunch);
   cam.zoom += (zt - cam.zoom) * (1 - Math.exp(-C.zoomK * dt));
 
   // Follow with a touch of lookahead, so he sees where he is going.
@@ -132,6 +134,25 @@ let magnetT = 0;          // seconds of magnet superpower remaining
 let magnetEaten = 0;      // eats since the magnet switched on (voice cap)
 let lastEatAt = -Infinity;
 let streakStep = 0;
+
+// Screen shake: a magnitude that decays, turned into a random per-frame offset.
+let shake = 0;
+let shakeX = 0;
+let shakeY = 0;
+let zoomPunch = 0;        // a brief extra zoom-in kick, e.g. on a whole-city win
+
+// Combo popups: a small fixed ring of floating numbers, screen space.
+const COMBOS = 6;
+const combos = Array.from({ length: COMBOS }, () => ({ t: 0, life: 0, x: 0, y: 0, n: 0 }));
+let comboCursor = 0;
+
+function addShake(mag) { shake = Math.min(CONFIG.juice.shakeMax, shake + mag); }
+
+function pushCombo(n, sx, sy) {
+  const c = combos[comboCursor];
+  comboCursor = (comboCursor + 1) % COMBOS;
+  c.t = 0; c.life = 0.9; c.x = sx; c.y = sy; c.n = n;
+}
 
 // The persistent city.
 let citySeed = (Math.random() * 0xffffffff) >>> 0;
@@ -318,6 +339,8 @@ function buildCity() {
 function newCityAfterCelebration() {
   rebuildPending = true;
   celebrations.cityComplete();
+  addShake(CONFIG.juice.shakeMax);   // the whole city goes down — feel it
+  zoomPunch = 0.12;
   timers.after(4.2, () => {
     citySeed = (Math.random() * 0xffffffff) >>> 0;
     cityEaten.clear();
@@ -352,10 +375,15 @@ function eatCheck() {
       hole.gulp();
       audio.gulp(th.size / T.tierSizes[LANDMARK_TIER]);
 
-      // Quick successive gulps climb a little pentatonic run.
+      // Quick successive gulps climb a little pentatonic run — and once the
+      // streak is worth cheering, a big number pops up over the hole.
       if (elapsed - lastEatAt <= CONFIG.streak.window) {
         streakStep = Math.min(streakStep + 1, CONFIG.streak.maxStep);
         audio.munch(streakStep);
+        if (streakStep + 1 >= CONFIG.juice.comboFrom) {
+          const s = toScreen(hole.x, hole.y);
+          pushCombo(streakStep + 1, s.x, s.y - hole.rShown * cam.zoom - 20);
+        }
       } else {
         streakStep = 0;
       }
@@ -375,6 +403,10 @@ function onEaten(th) {
   hole.grow(th.growth);
   cityEaten.add(th.cityId);
 
+  // The landing: dust kicked up at the rim, and a jolt for the big ones.
+  particles.dustPuff(hole.x, hole.y, th.size);
+  if (th.tier >= CONFIG.juice.shakeBigTier) addShake(2 + th.tier * 1.4 + th.size * 0.02);
+
   const muteVoice = magnetT > 0 && ++magnetEaten > 2;
   celebrations.onEat(th, muteVoice);
   surprises.onEat(!!hud.banner);
@@ -386,7 +418,7 @@ function onEaten(th) {
   if (th.district) {
     const left = (districtLeft.get(th.district) ?? 1) - 1;
     districtLeft.set(th.district, left);
-    if (left === 0 && activeThings() > 0) celebrations.districtClean(th.district);
+    if (left === 0 && activeThings() > 0) { celebrations.districtClean(th.district); addShake(12); }
   }
 
   if (activeThings() === 0 && !rebuildPending) newCityAfterCelebration();
@@ -454,15 +486,25 @@ function update(dt) {
   particles.update(dt, field);
   fx.update(dt, world);
   hud.update(dt, world);
+
+  // Shake decays smoothly; the visible offset is a fresh random kick each
+  // frame, scaled by whatever is left of the magnitude.
+  shake *= Math.exp(-CONFIG.juice.shakeDecay * dt);
+  if (shake < 0.2) shake = 0;
+  shakeX = (Math.random() * 2 - 1) * shake;
+  shakeY = (Math.random() * 2 - 1) * shake;
+
+  for (const c of combos) if (c.life > 0) { c.t += dt; if (c.t >= c.life) c.life = 0; }
 }
 
 function render() {
   // --- city space, through the camera. Top-down: the ground IS the scene. ---
+  // The shake offset (logical screen units) rides on top of the camera pan.
   const z = cam.zoom;
   ctx.setTransform(
     scale * z, 0, 0, scale * z,
-    scale * (world.w / 2 - cam.x * z),
-    scale * (world.h / 2 - cam.y * z),
+    scale * (world.w / 2 - cam.x * z + shakeX),
+    scale * (world.h / 2 - cam.y * z + shakeY),
   );
   const view = visibleRect();
   background.drawGround(ctx, view, field);
@@ -496,10 +538,60 @@ function render() {
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   background.drawLightTint(ctx, world);
   surprises.draw(ctx);   // flying ABOVE the city
+  drawVignette(ctx);
   hud.drawFlash(ctx, world);
   fx.draw(ctx);
+  drawCombos(ctx);
   drawGuides(ctx);
   hud.draw(ctx, world);
+}
+
+/** A soft darkening of the corners — the single cheapest "premium" touch. */
+let vignetteGrad = null;
+let vignetteKey = '';
+function drawVignette(ctx) {
+  const strength = CONFIG.juice.vignette;
+  if (strength <= 0) return;
+  const key = `${world.w.toFixed(0)}x${world.h.toFixed(0)}`;
+  if (key !== vignetteKey) {
+    const g = ctx.createRadialGradient(
+      world.w / 2, world.h / 2, world.h * 0.34,
+      world.w / 2, world.h / 2, world.h * 0.72,
+    );
+    g.addColorStop(0, 'rgba(10, 8, 26, 0)');
+    g.addColorStop(1, `rgba(10, 8, 26, ${strength})`);
+    vignetteGrad = g;
+    vignetteKey = key;
+  }
+  ctx.fillStyle = vignetteGrad;
+  ctx.fillRect(0, 0, world.w, world.h);
+}
+
+/** The floating streak numbers — big, colourful, they rise and fade. */
+function drawCombos(ctx) {
+  for (const c of combos) {
+    if (c.life <= 0) continue;
+    const p = c.t / c.life;
+    const rise = p * world.h * 0.06;
+    const pop = c.t < 0.16 ? c.t / 0.16 : 1;
+    const size = (34 + c.n * 4) * (0.6 + 0.4 * pop);
+    const hue = (c.n * 36) % 360;
+
+    ctx.save();
+    ctx.globalAlpha = 1 - Math.max(0, (p - 0.5) / 0.5);
+    ctx.translate(c.x, c.y - rise);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = uiFont(size);
+    ctx.lineWidth = size * 0.2;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(40, 24, 80, 0.9)';
+    const label = `${c.n}!`;
+    ctx.strokeText(label, 0, 0);
+    ctx.fillStyle = hsla(hue, 95, 62, 1);
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
 }
 
 /**
@@ -779,6 +871,7 @@ window.__hh = {
   get hole() { return { x: hole.x, y: hole.y, vx: hole.vx, vy: hole.vy, touching: hole.touching }; },
   get cam() { return { x: cam.x, y: cam.y, zoom: cam.zoom }; },
   get field() { return { w: field.w, h: field.h, mouth: hole.mouth }; },
+  get shake() { return shake; },
   get districts() { return Object.fromEntries(districtLeft); },
   get things() {
     const out = [];
