@@ -31,6 +31,7 @@ export class Hole {
     this.gulpT = 0;
     this.t = 0;
     this.lookX = 0; this.lookY = 0;   // smoothed travel direction, drives the eyes
+    this.trail = [];                  // recent {x, y, r} for the motion trail
   }
 
   /** A fresh start: small again, resting in the middle of the world. */
@@ -46,6 +47,7 @@ export class Hole {
     this.rVel = 0;
     this.gulpT = 0;
     this.touching = false;
+    this.trail = [];
   }
 
   /** How big a thing can be and still fit down the hole. */
@@ -111,9 +113,37 @@ export class Hole {
     this.rShown += this.rVel * dt;
 
     if (this.gulpT > 0) this.gulpT = Math.max(0, this.gulpT - dt * 2.4);
+
+    // Remember the last few frames' positions for the motion trail.
+    this.trail.push({ x: this.x, y: this.y, r: this.rShown });
+    if (this.trail.length > 7) this.trail.shift();
   }
 
   get speed() { return Math.hypot(this.vx, this.vy); }
+
+  /**
+   * A soft trail of portal ghosts behind the hole — faint rim echoes that
+   * appear only when it is really moving, so speed reads as motion rather than
+   * a teleport. Drawn in world space, before the pit. Cheap: a few strokes.
+   */
+  drawTrail(ctx) {
+    const fade = clamp((this.speed - 70) / 380, 0, 1);
+    if (fade <= 0.02 || this.trail.length < 3) return;
+
+    ctx.save();
+    for (let i = 0; i < this.trail.length - 1; i++) {
+      const g = this.trail[i];
+      const k = i / this.trail.length;            // older = fainter, smaller
+      const r = Math.max(6, g.r) * (0.7 + 0.25 * k);
+      const hue = (this.t * 40 - (this.trail.length - i) * 18) % 360;
+      ctx.strokeStyle = hsla(hue, 90, 68, fade * k * 0.5);
+      ctx.lineWidth = r * 0.12;
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.y, r * 0.98, r * 0.8, 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   /** The mouth's current ellipse in world coordinates — main.js clips
       sinking things against this, so they visibly drop BELOW the rim. */

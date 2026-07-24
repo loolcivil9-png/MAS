@@ -81,6 +81,8 @@ juice, and all of it in [`js/config.js`](js/config.js) under `juice`:
 - **Combo numbers** that pop and rise over the hole as the eat-streak climbs
 - **Anticipation**: things lean toward the hole as it approaches (visual only)
 - A soft **vignette** and a cinematic **zoom-punch** when a city is finished
+- A faint **motion trail** of portal-rim ghosts behind the hole when it moves,
+  so speed reads as smooth motion rather than a jump
 
 Things come in **armies** — a bed of seven flowers, a row of four parked
 cars, a block of six buildings — because a line of the same thing begs to be

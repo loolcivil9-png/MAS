@@ -8,7 +8,7 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '3.4.0',
+  version: '3.5.0',
 
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Hungry Hole". */
@@ -81,13 +81,14 @@ export const CONFIG = {
     baseRadius: 29,        // how small it starts in a fresh city: only the very
                            // tiniest things fit at first
     mouthRatio: 1.0,       // a thing fits when its size <= hole radius * this
-    maxSpeed: 900,         // top speed in world units/second at full stick...
-    growthSpeed: 1.2,      // ...plus this much per unit of radius, so a big hole
-                           // still feels fast on the pulled-back camera
-    stickRadius: 120,      // finger displacement (logical screen units) for full
-                           // speed; a gentle nudge gives slow, precise movement
-    deadZone: 8,           // displacement below this does nothing (a resting finger)
-    accelK: 14,            // how quickly it reaches the commanded speed (snappy)
+    maxSpeed: 430,         // top speed in world units/second at full stick — a
+                           // calm, controllable pace for small hands
+    growthSpeed: 0.7,      // ...plus this much per unit of radius, so a big hole
+                           // still feels lively on the pulled-back camera
+    stickRadius: 155,      // finger displacement (logical screen units) for full
+                           // speed; bigger = more room for slow, precise steering
+    deadZone: 12,          // displacement below this does nothing (a resting finger)
+    accelK: 11,            // how quickly it reaches the commanded speed (smooth)
     glideDamp: 4.5,        // how quickly it coasts to a stop when the finger lifts
     springK: 130,          // the boing when it grows...
     springDamp: 0.86,      // ...and how quickly the boing settles

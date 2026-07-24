@@ -540,6 +540,8 @@ function render() {
   const view = visibleRect();
   background.drawGround(ctx, view, field);
 
+  hole.drawTrail(ctx);   // motion ghosts behind the hole, above the ground
+
   // The pit first; then anything SINKING, clipped inside the mouth so it
   // visibly drops below ground; then the rim and eyes close over it.
   hole.drawPit(ctx);
