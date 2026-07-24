@@ -22,11 +22,14 @@ The whole folder is a deployable static site.
 
 And around how a three-year-old actually uses a phone:
 
-- **The finger is a joystick, not a pointer.** The finger's *movement* steers
-  the hole — its position on the glass means nothing. He can drive from the
-  corner of the screen without ever covering the action with his hand, and
-  there is no aiming and no precision to get wrong. Hold still and the hole
-  eases to a stop; let go and it glides out
+- **The finger is a touch-anchored joystick.** Wherever he first touches
+  becomes the centre; the hole then travels in the direction he holds his
+  finger *away* from that centre — and **keeps going as long as he holds it
+  there**, no need to keep swiping. Further out = faster; a gentle nudge is
+  slow and precise. He can steer from any corner without covering the action,
+  a fresh touch never jumps the hole to his finger, and letting go glides it
+  to a stop. Speed and the stick's feel are tunable in `js/config.js` under
+  `hole` (`maxSpeed`, `stickRadius`, `accelK`, `deadZone`)
 - **Ten fingers work at once.** The newest finger steers; lifting it hands
   control to the next one still down. A palm-slam is just a lot of downs
 - **No way out.** Zoom, scroll, pull-to-refresh, long-press menus and text

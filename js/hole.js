@@ -23,7 +23,7 @@ export class Hole {
   constructor() {
     this.x = 0; this.y = 0;
     this.vx = 0; this.vy = 0;
-    this.inX = 0; this.inY = 0;   // finger movement gathered this frame
+    this.cmdVx = 0; this.cmdVy = 0;   // the velocity the joystick is asking for
     this.touching = false;
     this.r = CONFIG.hole.baseRadius;
     this.rShown = this.r;
@@ -39,8 +39,8 @@ export class Hole {
     this.y = bounds.h / 2;
     this.vx = 0;
     this.vy = 0;
-    this.inX = 0;
-    this.inY = 0;
+    this.cmdVx = 0;
+    this.cmdVy = 0;
     this.r = CONFIG.hole.baseRadius;
     this.rShown = this.r;
     this.rVel = 0;
@@ -51,14 +51,21 @@ export class Hole {
   /** How big a thing can be and still fit down the hole. */
   get mouth() { return this.r * CONFIG.hole.mouthRatio; }
 
-  /** Finger moved this much (in world units). Accumulated until the next update. */
-  steer(dx, dy) {
-    this.inX += dx;
-    this.inY += dy;
+  /**
+   * The joystick's command: the world-space velocity it wants, in units/sec.
+   * Set every frame by main.js from the finger's displacement. The hole eases
+   * toward this, so holding the finger displaced keeps it moving.
+   */
+  drive(vx, vy) {
+    this.cmdVx = vx;
+    this.cmdVy = vy;
     this.touching = true;
   }
 
   release() { this.touching = false; }
+
+  /** The most speed the hole can make right now — grows a little with size. */
+  get topSpeed() { return CONFIG.hole.maxSpeed + this.rShown * CONFIG.hole.growthSpeed; }
 
   grow(amount) { this.r += amount; }
 
@@ -70,26 +77,17 @@ export class Hole {
     const H = CONFIG.hole;
 
     if (this.touching) {
-      // The finger's speed this frame becomes the commanded velocity, capped
-      // at the hole's top speed (which creeps up a little as it grows, so a
-      // big hole feels mighty rather than sluggish on a zoomed-out camera).
-      const maxV = H.maxSpeed + this.rShown * 0.8;
-      let tx = (this.inX / Math.max(dt, 1e-4)) * H.steerGain;
-      let ty = (this.inY / Math.max(dt, 1e-4)) * H.steerGain;
-      const m = Math.hypot(tx, ty);
-      if (m > maxV) { tx *= maxV / m; ty *= maxV / m; }
-
+      // Ease toward the joystick's commanded velocity — it persists frame to
+      // frame, so a held finger keeps the hole going without re-swiping.
       const k = 1 - Math.exp(-H.accelK * dt);
-      this.vx += (tx - this.vx) * k;
-      this.vy += (ty - this.vy) * k;
+      this.vx += (this.cmdVx - this.vx) * k;
+      this.vy += (this.cmdVy - this.vy) * k;
     } else {
       // Let go: coast out gently rather than stopping dead.
       const d = Math.exp(-H.glideDamp * dt);
       this.vx *= d;
       this.vy *= d;
     }
-    this.inX = 0;
-    this.inY = 0;
 
     this.x += this.vx * dt;
     this.y += this.vy * dt;

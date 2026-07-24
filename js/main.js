@@ -245,18 +245,19 @@ window.addEventListener('resize', scheduleResize);
 window.addEventListener('orientationchange', scheduleResize);
 window.visualViewport?.addEventListener('resize', scheduleResize);
 
-/* --- input: relative steering ------------------------------------------------ */
+/* --- input: touch-anchored virtual joystick ---------------------------------- */
 
 const toLogical = (clientX, clientY) => ({
   x: ((clientX - viewport.left) / viewport.width) * world.w,
   y: ((clientY - viewport.top) / viewport.height) * world.h,
 });
 
-// Fingers currently on the screen, in press order, plus each one's last seen
-// position. The newest finger steers; when it lifts, an older finger that is
-// still down takes over. A palm-slam is just a lot of downs.
-const pointers = [];
-const lastPt = new Map();
+// Fingers currently on the screen, in press order. The newest one steers; when
+// it lifts, an older finger still down takes over. A palm-slam is a lot of
+// downs. Each finger carries its own joystick: `anchor` is where it first
+// touched, `cur` is where it is now — the hole moves along (cur - anchor).
+const pointers = [];       // pointerId[], press order (last = active)
+const sticks = new Map();  // pointerId -> { ax, ay, cx, cy }
 
 function onPoint(x, y, kind, pointerId) {
   if (!running) return;
@@ -265,23 +266,51 @@ function onPoint(x, y, kind, pointerId) {
     const i = pointers.indexOf(pointerId);
     if (i !== -1) pointers.splice(i, 1);
     pointers.push(pointerId);
-    lastPt.set(pointerId, { x, y });
+    // Anchor here — a new touch never moves the hole, it just re-centres.
+    sticks.set(pointerId, { ax: x, ay: y, cx: x, cy: y });
     // Every touch is answered: the hole perks up and sparkles.
     particles.sparkleBurst(hole.x, hole.y - hole.rShown, rand(0, 360), 4);
-    hole.steer(0, 0); // wakes the "I am being driven" state without moving
   } else if (kind === 'move') {
-    const p = lastPt.get(pointerId);
-    lastPt.set(pointerId, { x, y });
-    if (!p || pointers[pointers.length - 1] !== pointerId) return;
-    // A screen-space finger stroke commands the same on-screen motion at any
-    // zoom, so dividing by the camera zoom converts it to city units.
-    hole.steer((x - p.x) / cam.zoom, (y - p.y) / cam.zoom);
+    const s = sticks.get(pointerId);
+    if (s) { s.cx = x; s.cy = y; }
   } else { // 'up'
     const i = pointers.indexOf(pointerId);
     if (i !== -1) pointers.splice(i, 1);
-    lastPt.delete(pointerId);
+    sticks.delete(pointerId);
     if (pointers.length === 0) hole.release();
   }
+}
+
+/**
+ * Turns the active finger's joystick into the hole's commanded velocity, once
+ * per frame. Reading stored state (not move events) is what lets a finger held
+ * still — but displaced — keep the hole moving.
+ */
+function driveHole() {
+  const id = pointers[pointers.length - 1];
+  const s = id !== undefined ? sticks.get(id) : null;
+  if (!s) return;
+
+  const H = CONFIG.hole;
+  let dx = s.cx - s.ax;
+  let dy = s.cy - s.ay;
+  let dist = Math.hypot(dx, dy);
+
+  // Floating anchor: if the finger has pulled past full-speed range, slide the
+  // anchor after it, so full-speed steering stays possible without the finger
+  // leaving the glass.
+  if (dist > H.stickRadius) {
+    const pull = dist - H.stickRadius;
+    s.ax += (dx / dist) * pull;
+    s.ay += (dy / dist) * pull;
+    dx = s.cx - s.ax; dy = s.cy - s.ay; dist = H.stickRadius;
+  }
+
+  if (dist <= H.deadZone) { hole.drive(0, 0); return; }
+
+  const mag = clamp((dist - H.deadZone) / (H.stickRadius - H.deadZone), 0, 1);
+  const speed = hole.topSpeed * mag;
+  hole.drive((dx / dist) * speed, (dy / dist) * speed);
 }
 
 attachInput(canvas, toLogical, onPoint);
@@ -469,6 +498,7 @@ function update(dt) {
   background.update(dt);
 
   surprises.update(dt, world);
+  driveHole();             // the joystick sets the hole's velocity for this frame
   hole.update(dt, field);
   updateCamera(dt);
 
@@ -869,7 +899,7 @@ window.__hh = {
   get holeR() { return hole.r; },
   get cities() { return hud.trophies; },
   get seed() { return citySeed; },
-  get hole() { return { x: hole.x, y: hole.y, vx: hole.vx, vy: hole.vy, touching: hole.touching }; },
+  get hole() { return { x: hole.x, y: hole.y, vx: hole.vx, vy: hole.vy, speed: hole.speed, touching: hole.touching }; },
   get cam() { return { x: cam.x, y: cam.y, zoom: cam.zoom }; },
   get field() { return { w: field.w, h: field.h, mouth: hole.mouth }; },
   get shake() { return shake; },
