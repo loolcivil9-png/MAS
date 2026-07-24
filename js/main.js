@@ -31,7 +31,7 @@ import { Celebrations } from './celebrate.js';
 import { audio } from './audio.js';
 import { attachInput, suppressBrowserGestures } from './input.js';
 import { Surprises } from './surprise.js';
-import { generateCity, TOTAL_KINDS } from './city.js';
+import { generateCity, roadRects, TOTAL_KINDS } from './city.js';
 import { met, loadSave, initSave, flushSave, clearSave } from './save.js';
 
 /* --- elements --------------------------------------------------------------- */
@@ -120,8 +120,8 @@ const hole = new Hole();
 
 // Must comfortably exceed the city plan's thing count — a full pool silently
 // recycles the oldest live thing, which in a fixed city means losing pieces.
-// The current plan is ~208 things; 300 leaves clear headroom.
-const things = new Pool(300, () => new Thing());
+// The current plan is ~340 things; 460 leaves clear headroom.
+const things = new Pool(460, () => new Thing());
 
 let running = false;
 let started = false;
@@ -905,11 +905,13 @@ window.__hh = {
   get cam() { return { x: cam.x, y: cam.y, zoom: cam.zoom }; },
   get field() { return { w: field.w, h: field.h, mouth: hole.mouth }; },
   get shake() { return shake; },
+  get roads() { return roadRects(); },
+  get cfgTierSizes() { return CONFIG.things.tierSizes; },
   get districts() { return Object.fromEntries(districtLeft); },
   get things() {
     const out = [];
     for (const th of things.items) {
-      if (th.active) out.push({ id: th.cityId, x: Math.round(th.x), y: Math.round(th.y), size: th.size, tier: th.tier, state: th.state, district: th.district });
+      if (th.active) out.push({ id: th.cityId, x: Math.round(th.x), y: Math.round(th.y), size: th.size, tier: th.tier, state: th.state, district: th.district, wander: !!th.wander });
     }
     return out;
   },

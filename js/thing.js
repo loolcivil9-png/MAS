@@ -12,6 +12,7 @@
 
 import { CONFIG, emojiFont } from './config.js';
 import { TAU, rand, clamp, easeInCubic, easeOutCubic, hsla } from './util.js';
+import { drawArt } from './art.js';
 
 /* --- emoji sprite cache ------------------------------------------------------ */
 
@@ -19,9 +20,14 @@ const sprites = new Map(); // "glyph@bucket" -> canvas (with .logicalDim)
 const OVERSAMPLE = 3;      // razor-sharp even on the big buildings and the stadium
 const PADDING = 1.35;      // emoji glyphs overhang their em box; leave room
 
-function getSprite(glyph, size) {
+/**
+ * One sprite per (look, size bucket). A catalog entry carries EITHER an
+ * `art` recipe — architecture and vehicles, drawn properly by art.js — or a
+ * `glyph`, for the small props where emoji still look best.
+ */
+function getSprite(entry, size) {
   const bucket = Math.min(420, Math.ceil(size / 14) * 14);
-  const key = `${glyph}@${bucket}`;
+  const key = entry.art ? `art:${entry.art}@${bucket}` : `${entry.glyph}@${bucket}`;
   let c = sprites.get(key);
   if (!c) {
     const dim = Math.ceil(bucket * 2 * PADDING);   // square, in logical units
@@ -29,10 +35,15 @@ function getSprite(glyph, size) {
     c.width = c.height = dim * OVERSAMPLE;
     const g = c.getContext('2d');
     g.scale(OVERSAMPLE, OVERSAMPLE);
-    g.font = emojiFont(bucket * 2);
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText(glyph, dim / 2, dim / 2 + bucket * 0.08);
+    if (entry.art) {
+      g.translate(dim / 2, dim / 2);
+      drawArt(g, entry.art, bucket);
+    } else {
+      g.font = emojiFont(bucket * 2);
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(entry.glyph, dim / 2, dim / 2 + bucket * 0.08);
+    }
     c.logicalDim = dim;
     sprites.set(key, c);
   }
@@ -53,7 +64,8 @@ export class Thing {
    */
   spawn(entry, tier, size, x, y) {
     this.active = true;
-    this.glyph = entry.glyph;
+    this.glyph = entry.glyph ?? null;
+    this.art = entry.art ?? null;
     this.name = entry.name;
     this.call = entry.call ?? null;
     this.runner = !!entry.runner;
@@ -84,7 +96,7 @@ export class Thing {
     this.tumble = 0;
     this.tumbleV = 0;
 
-    this.sprite = getSprite(this.glyph, size);
+    this.sprite = getSprite(entry, size);
   }
 
   /**

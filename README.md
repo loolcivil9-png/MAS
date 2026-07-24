@@ -8,7 +8,8 @@ whole city, stadium and all, has gone down the hatch. Then a brand-new city
 grows back.
 
 Plain HTML, CSS and JavaScript. No framework, no build step, no dependencies,
-no asset files — the sounds are generated in code and the world is emoji.
+no asset files — the sounds are generated in code, the city's buildings and
+vehicles are drawn in code, and the small props are emoji.
 The whole folder is a deployable static site.
 
 ## Designed around one rule: he cannot lose
@@ -50,16 +51,37 @@ because the small things live at the bottom and the big things at the top:
 | **Downtown** (top) | A block of big buildings — offices, the shop, the bank, the hotel, the church, the school |
 | **The stadium** | The one giant landmark at the very top. The last bite of all. |
 
-The ground is a proper, **detailed top-down cityscape**: paved blocks with
-kerbs, a tiled downtown plaza, a car park with painted bays and street trees,
-suburban garden strips and paths, striped market-stall awnings over the fruit,
-and a park with a pond, a winding path and flowerbed soil — none of it eatable,
-all of it drawn under the bright chunky things. Everything is **big and bold**
-(the camera sits close), the districts are laid out in **tidy grids and rows**,
-and there are ~200 things across the city. Day slides into night as a light
-tint over the whole scene. **The people of the city stroll about their day**,
-scatter with a comic "wheee!" when the hole rumbles close, and are always
-catchable.
+### The art is drawn, not emoji
+
+Emoji are designed to be read at about sixteen pixels. Blown up to a
+two-hundred-unit building they become blurry, side-on clip art floating on the
+map — which is why the city never looked like a city. So all the architecture
+and every vehicle is **drawn in code** ([`js/art.js`](js/art.js)) in a friendly
+top-down "dollhouse" style: houses with pitched roofs, chimneys and front
+doors; buildings with roof decks, rooftop vents, water tanks, skylights and a
+coloured parapet so each is its own place; cars, buses and fire engines seen
+from directly above with four wheels and glass at both ends; leafy trees; and
+a stadium with stands and a marked pitch. Small props — fruit, flowers,
+balls, people, animals, baskets — stay emoji, because at their size emoji look
+wonderful and carry far more charm than anything drawn.
+
+### The layout obeys the map
+
+The city is **generated from its own road grid**, never typed as coordinates.
+The blocks (`plots()`) are computed as the rectangles *between* the roads, and
+every district fills its plots with grids sized to the plot itself. A final
+audit then proves the result: nothing on a road, nothing out of bounds, and no
+two things overlapping — and because the grid spacing is provably wider than
+two things can lean, the city comes out identical for every seed.
+
+The ground is paved to match those exact plots: kerbed sidewalks, a tiled
+downtown plaza, a car park with bays painted right under the parked ranks,
+suburban garden strips and a path, striped market-stall awnings over the fruit
+crates, and a park with a pond, a path and flowerbed soil — none of it
+eatable, all of it under the things. There are **~350 things** across the
+city. Day slides into night as a light tint over the whole scene. **The people
+of the city stroll about their day**, scatter with a comic "wheee!" when the
+hole rumbles close, and are always catchable.
 
 **Eating is physics, not an animation**: the pit's pull takes hold of a
 thing, it tips over as it slides in, and then it visibly sinks *below the
@@ -84,11 +106,11 @@ juice, and all of it in [`js/config.js`](js/config.js) under `juice`:
 - A faint **motion trail** of portal-rim ghosts behind the hole when it moves,
   so speed reads as smooth motion rather than a jump
 
-Things come in **armies** — a bed of seven flowers, a row of four parked
-cars, a block of six buildings — because a line of the same thing begs to be
-hoovered up in one glorious pass. Real roads with dashed centre lines run
-between the districts, a park lawn tints the bottom of the map, and the whole
-city is generated from a seed, so it can be saved and resumed exactly.
+Things come in **armies** — a bed of flowers, a rank of parked cars, a block
+of buildings — because a line of the same thing begs to be hoovered up in one
+glorious pass. Real roads with dashed centre lines and zebra crossings run
+between the districts, and the whole city is generated from a seed, so it can
+be saved and resumed exactly.
 
 A camera rides on the hole with a touch of lookahead and **zooms out as the
 hole grows** — the city visibly "gets smaller" around it, which is the whole
@@ -98,7 +120,7 @@ this big must never become a dead end.
 
 ## How it plays
 
-About 110 things in seven sizes fill the city, flowers to stadium. The hole
+About 350 things in seven sizes fill the city, flowers to stadium. The hole
 starts small enough that only the very tiniest things fit — and **each new
 size takes a satisfying while to reach**: growth shares scale with
 size^1.3, so a whole flower-bed of tiny things is needed before boxes fit,
@@ -221,10 +243,12 @@ The dials that matter most:
 - `objectSounds.chance` and `audio.speakChance` — how chatty the city is
 - `surprise.minEatsBetween` / `maxEatsBetween` — how often the sky surprises
 
-The map itself lives in [`js/city.js`](js/city.js): each district is a few
-lines of `row(…)` / `cluster(…)` / `add(…)` calls placing its things at
-fractions of the city — move a district, thicken an army, or add a whole new
-one freely. The sky palettes are the `PALETTES` array in
+The map itself lives in [`js/city.js`](js/city.js): each district fills its
+plots with a few `fill(strip(…))` calls, measured in real units down from the
+plot's top edge, so you can widen a band or thicken an army and see instantly
+whether a row still fits. The plots themselves are computed from the roads, so
+nothing you place can land in the street. Building, vehicle and tree artwork is
+in [`js/art.js`](js/art.js), and the sky palettes are the `PALETTES` array in
 [`js/background.js`](js/background.js).
 
 ### Knowing what is deployed
@@ -245,14 +269,15 @@ index.html              shell, splash, parent gate
 css/style.css           splash, grown-ups menu, all the touch hardening
 js/main.js              canvas sizing, game loop, camera, eating, city bookkeeping, menu wiring
 js/config.js            every tunable number
-js/city.js              THE MAP — districts, armies, the seeded city generator, praise phrases
+js/city.js              THE MAP — plots derived from the roads, the seeded generator, the audit
+js/art.js               the drawn artwork: buildings, houses, vehicles, trees, the stadium
 js/hole.js              the hole itself: joystick steering, growth spring, gulp, eyes
-js/thing.js             a thing in the city: idle, flee, wobble, spiral down
+js/thing.js             a thing in the city: idle, flee, wobble, fall in — and its sprite cache
 js/particles.js         pooled confetti, glitter, shards, rings, fireworks
 js/celebrate.js         star row, district-clean and whole-city celebrations, first-meets
 js/hud.js               star row, trophy tally, win banner, screen flash
 js/audio.js             synthesized sound — gulps, boings, voices — and speech
-js/background.js        the drifting skies, and the city ground: roads, lawn, border
+js/background.js        the drifting skies, and the city ground: plots, roads, paving, scenery
 js/surprise.js          the butterflies / rocket / balloons / birds flybys
 js/save.js              the persistent city + lifetime totals (+ old-save migration)
 js/input.js             multi-touch pointer tracking, gesture suppression

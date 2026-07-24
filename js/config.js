@@ -8,7 +8,7 @@ export const CONFIG = {
   /* Shown small at the bottom of the home screen, so you can tell at a glance
      which build is actually live after a deploy.
      BUMP THIS on every change, and bump CACHE in sw.js to match. */
-  version: '3.5.0',
+  version: '4.0.0',
 
   /* Shown on the splash screen and used as the PWA name.
      Put his name here — e.g. "Sami's Hungry Hole". */
@@ -33,8 +33,8 @@ export const CONFIG = {
      a half-eaten city can be saved and resumed. */
   city: {
     width: 2100,           // fixed world size in logical units, independent of
-    height: 4200,          // the screen — a big portrait city, roomy enough for
-                           // the bigger, denser assets to sit tidily
+    height: 5600,          // the screen — a big portrait city, roomy enough for
+                           // every district to hold proper multi-row blocks
     growthExp: 1.3,        // growth shares scale with size^this. Above 1 means
                            // small things give little growth, so each new size
                            // takes a satisfying while to reach

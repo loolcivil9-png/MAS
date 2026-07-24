@@ -9,7 +9,7 @@
    --------------------------------------------------------------------------- */
 
 import { TAU, rand, lerp, clamp, easeInOutSine, hsla } from './util.js';
-import { ROAD_YS, ROAD_WIDTH, AVENUE, PANELS } from './city.js';
+import { ROAD_YS, ROAD_WIDTH, AVENUE, plots } from './city.js';
 
 const CLOUD_COUNT = 7;
 const STAR_COUNT = 70;
@@ -245,46 +245,34 @@ export class Background {
       }
     }
 
-    // --- the city blocks: paved panels with kerbs between the roads ----------
-    for (const b of PANELS) {
-      const bx = field.w * b.x0;
-      const by = field.h * b.y0;
-      const bw = field.w * (b.x1 - b.x0);
-      const bh = field.h * (b.y1 - b.y0);
-      if (by > view.y + view.h || by + bh < view.y) continue;
+    // --- the city blocks: every plot paved to suit its district -------------
+    // These are the SAME rectangles the layout fills, so the paving always
+    // lines up with the things standing on it and never creeps onto a road.
+    for (const b of plots()) {
+      const bw = b.x1 - b.x0;
+      const bh = b.y1 - b.y0;
+      if (b.y0 > view.y + view.h || b.y1 < view.y) continue;
 
       if (b.kind === 'lawn') {
         ctx.fillStyle = '#7cc76c';
-        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillRect(b.x0, b.y0, bw, bh);
         ctx.lineWidth = 6;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-        ctx.strokeRect(bx + 3, by + 3, bw - 6, bh - 6);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.strokeRect(b.x0 + 3, b.y0 + 3, bw - 6, bh - 6);
       } else {
-        // The kerb shadow first, then the slab, then a pale kerb line.
+        // A kerb shadow, the slab itself, then the pale kerb line on top.
         ctx.fillStyle = 'rgba(30, 40, 30, 0.18)';
-        ctx.fillRect(bx - 5, by - 5, bw + 10, bh + 10);
-        ctx.fillStyle = b.kind === 'asphalt' ? '#a7abbc' : '#ddd8ca';
-        ctx.fillRect(bx, by, bw, bh);
-        ctx.lineWidth = 5;
+        ctx.fillRect(b.x0 - 6, b.y0 - 6, bw + 12, bh + 12);
+        ctx.fillStyle = b.kind === 'asphalt' ? '#a7abbc'
+          : b.kind === 'plaza' ? '#d9d5cc' : '#ddd8ca';
+        ctx.fillRect(b.x0, b.y0, bw, bh);
+        ctx.lineWidth = 6;
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.strokeRect(bx + 2.5, by + 2.5, bw - 5, bh - 5);
+        ctx.strokeRect(b.x0 + 3, b.y0 + 3, bw - 6, bh - 6);
       }
-
-      // Parking bay lines across the whole asphalt lot, matching the ranks.
-      if (b.kind === 'asphalt') {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-        for (const rowY of [0.285, 0.335]) {
-          const ry = field.h * rowY;
-          for (let i = 0; i <= 14; i++) {
-            const lx = field.w * (0.08 + i * 0.06);
-            ctx.fillRect(lx - 2.5, ry - field.h * 0.024, 5, field.h * 0.048);
-          }
-        }
-      }
+      this.#drawPlotDetail(ctx, b, bw, bh);
     }
 
-    // --- district scenery: what makes each block a PLACE, not a panel --------
-    this.#drawCityScenery(ctx, view, field);
 
     // --- the roads ------------------------------------------------------------
     const half = ROAD_WIDTH / 2;
@@ -335,88 +323,87 @@ export class Background {
   }
 
   /**
-   * The decorative detail that turns paved panels into real districts —
-   * plaza tiles downtown, garden strips and paths in the suburbs, striped
-   * market-stall awnings under the fruit, a park path, pond and flowerbeds,
-   * and trees lining the streets. All scenery, never eatable, drawn under the
-   * things. Each block is skipped when it is off-camera.
+   * The detail that turns a paved rectangle into a real district. Everything
+   * here is measured from the plot's own top-left in the SAME units the
+   * layout uses, so the paving lines up with the things standing on it: the
+   * bays sit under the parked cars, the awnings under the fruit crates, the
+   * garden strips between the rows of homes. Scenery only — never eatable.
    */
-  #drawCityScenery(ctx, view, field) {
-    const W = field.w;
-    const H = field.h;
-    const on = (y0, y1) => y1 * H > view.y && y0 * H < view.y + view.h;
+  #drawPlotDetail(ctx, b, w, h) {
+    const x = b.x0;
+    const y = b.y0;
 
-    // DOWNTOWN: a tiled plaza, so the towers stand on a proper square.
-    if (on(0.075, 0.225)) {
-      ctx.strokeStyle = 'rgba(150, 150, 165, 0.4)';
+    if (b.kind === 'plaza') {
+      // Downtown: a tiled square under the towers.
+      ctx.strokeStyle = 'rgba(150, 150, 165, 0.35)';
       ctx.lineWidth = 3;
-      for (let gx = 0.1; gx < 0.9; gx += 0.1) {
-        ctx.beginPath();
-        ctx.moveTo(W * gx, H * 0.08); ctx.lineTo(W * gx, H * 0.22); ctx.stroke();
+      for (let gx = 120; gx < w; gx += 120) {
+        ctx.beginPath(); ctx.moveTo(x + gx, y + 8); ctx.lineTo(x + gx, y + h - 8); ctx.stroke();
       }
-      for (let gy = 0.09; gy < 0.225; gy += 0.028) {
-        ctx.beginPath();
-        ctx.moveTo(W * 0.06, H * gy); ctx.lineTo(W * 0.94, H * gy); ctx.stroke();
+      for (let gy = 120; gy < h; gy += 120) {
+        ctx.beginPath(); ctx.moveTo(x + 8, y + gy); ctx.lineTo(x + w - 8, y + gy); ctx.stroke();
       }
+      return;
     }
 
-    // HOUSES: green front-garden strips and a pale path down the middle.
-    if (on(0.455, 0.605)) {
-      ctx.fillStyle = 'rgba(120, 195, 108, 0.55)';
-      ctx.fillRect(W * 0.06, H * 0.46, W * 0.88, H * 0.02);
-      ctx.fillRect(W * 0.06, H * 0.585, W * 0.88, H * 0.02);
-      ctx.fillStyle = 'rgba(222, 214, 196, 0.7)';
-      ctx.fillRect(W * 0.49, H * 0.455, W * 0.02, H * 0.15);
-    }
-
-    // MARKET: three striped awnings with a tan table under each stall.
-    if (on(0.635, 0.785)) {
-      const stalls = [[0.2, '#e5564b'], [0.5, '#4b9be5'], [0.8, '#59b34e']];
-      for (const [cx, col] of stalls) {
-        ctx.fillStyle = 'rgba(120, 90, 60, 0.55)';           // the trestle table
-        ctx.fillRect(W * (cx - 0.09), H * 0.7, W * 0.18, H * 0.055);
-        ctx.fillStyle = col;                                  // the awning
-        ctx.fillRect(W * (cx - 0.1), H * 0.628, W * 0.2, H * 0.02);
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';             // its scalloped stripes
-        for (let i = 0; i < 5; i++) ctx.fillRect(W * (cx - 0.1) + W * 0.04 * i, H * 0.628, W * 0.02, H * 0.02);
-      }
-    }
-
-    // PARK: a pond, a winding path, and dark soil under the flowerbeds.
-    if (on(0.815, 0.985)) {
-      ctx.fillStyle = 'rgba(90, 160, 210, 0.7)';              // the pond
-      ctx.beginPath();
-      ctx.ellipse(W * 0.5, H * 0.915, W * 0.12, H * 0.03, 0, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(120, 200, 235, 0.5)';
-      ctx.beginPath();
-      ctx.ellipse(W * 0.5, H * 0.912, W * 0.09, H * 0.02, 0, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(224, 214, 190, 0.6)';           // the path
-      ctx.lineWidth = 22;
-      ctx.beginPath();
-      ctx.moveTo(W * 0.5, H * 0.82);
-      ctx.bezierCurveTo(W * 0.2, H * 0.87, W * 0.8, H * 0.93, W * 0.5, H * 0.985);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(92, 66, 44, 0.45)';               // soil under the beds
-      for (const [cx, cy] of [[0.28, 0.9], [0.72, 0.9], [0.5, 0.965]]) {
-        ctx.beginPath();
-        ctx.ellipse(W * cx, H * cy, W * 0.14, H * 0.035, 0, 0, TAU);
-        ctx.fill();
-      }
-    }
-
-    // STREET TREES: flat green dots lining the inside edges of the car park.
-    if (on(0.265, 0.425)) {
-      ctx.fillStyle = 'rgba(58, 130, 58, 0.8)';
-      for (let i = 0; i <= 12; i++) {
-        const tx = W * (0.09 + i * 0.07);
-        for (const ty of [0.272, 0.418]) {
-          ctx.beginPath();
-          ctx.arc(tx, H * ty, 12, 0, TAU);
-          ctx.fill();
+    if (b.kind === 'asphalt') {
+      // The car park: painted bays exactly under the two ranks of cars.
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      for (const [top, height] of [[100, 350], [460, 180]]) {
+        if (top + height > h) continue;
+        for (let i = 0; i <= 5; i++) {
+          const lx = x + (w / 5) * i;
+          ctx.fillRect(lx - 2.5, y + top + 6, 5, height - 12);
         }
+        ctx.fillRect(x + 6, y + top + height / 2 - 2, w - 12, 4);
       }
+      return;
+    }
+
+    if (b.kind === 'lawn') {
+      // The park: a pond, a winding path and dark soil under the flower beds.
+      ctx.fillStyle = 'rgba(224, 214, 190, 0.55)';
+      ctx.fillRect(x + w * 0.46, y + 180, w * 0.08, h - 300);
+      ctx.fillStyle = 'rgba(92, 66, 44, 0.35)';
+      for (const [fx0, fx1, top, height] of [[0.02, 0.3, 195, 210], [0.7, 0.98, 195, 210]]) {
+        ctx.fillRect(x + w * fx0, y + top, w * (fx1 - fx0), height);
+      }
+      ctx.fillStyle = 'rgba(90, 160, 210, 0.7)';
+      ctx.beginPath();
+      ctx.ellipse(x + w * 0.5, y + h - 60, w * 0.16, 46, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(130, 205, 240, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(x + w * 0.5, y + h - 64, w * 0.12, 32, 0, 0, TAU);
+      ctx.fill();
+      return;
+    }
+
+    // Pavement: the market gets stall awnings, the suburb gets garden strips.
+    // Both are keyed off the plot's height, which differs between the two.
+    const isMarket = b.d === 'market';
+    if (isMarket) {
+      const colours = ['#e5564b', '#4b9be5'];
+      for (const [i, top] of [0, 170].entries()) {
+        if (top + 160 > h) continue;
+        ctx.fillStyle = 'rgba(120, 90, 60, 0.4)';       // the trestle table
+        ctx.fillRect(x + 10, y + top, w - 20, 160);
+        ctx.fillStyle = colours[i];                      // the awning above it
+        ctx.fillRect(x + 4, y + top - 18, w - 8, 18);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';        // its scalloped stripes
+        for (let s = 0; s < 8; s++) ctx.fillRect(x + 4 + (w / 8) * s, y + top - 18, w / 16, 18);
+      }
+      return;
+    }
+    if (b.d === 'houses') {
+      ctx.fillStyle = 'rgba(120, 195, 108, 0.55)';
+      for (const top of [252, 564]) {
+        if (top + 55 > h) continue;
+        ctx.fillRect(x + 8, y + top, w - 16, 55);
+      }
+      // a path down the middle of the suburb
+      ctx.fillStyle = 'rgba(222, 214, 196, 0.6)';
+      ctx.fillRect(x + w * 0.47, y + 8, w * 0.06, h - 16);
     }
   }
 
